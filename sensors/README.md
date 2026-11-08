@@ -2,84 +2,171 @@
 
 **Branch:** `sensors` · **Pair:** Person 4 (simulator) · **Feeds:** Person 2 (engine)
 
-Waiting on Person 4's sample? Hand-write a tiny `readings.csv` (one water bowl, a few drinks and one refill) and start on `stable.py` and `bowls.py` right away.
+**In one sentence:** read the raw scale weights and work out what the cat did: how much it ate and drank, when it used the litter box, and what it weighs. This is the code that would run on real scales.
 
-**Goal:** turn raw scale readings into real amounts: how much the cat ate and drank, when it used the litter box, and what it weighs. This is the code that would run on real hardware.
+| | File | Contract section |
+|---|---|---|
+| **Input** | `simulator/output/readings.csv` | 1 |
+| **Output** | `sensors/output/events.csv` | 2 |
+| **Output** | `sensors/output/daily.csv` (Person 2 uses this) | 3 |
+| **Answer keys** (tests only) | `simulator/output/truth_events.csv`, `truth_daily.csv` | 1 |
 
-Input: `simulator/output/readings.csv` (contract section 1).
-Output: `output/events.csv` (section 2) and `output/daily.csv` (section 3).
+**Golden rule:** your processing code reads **only** `readings.csv`. The answer keys are for `test_accuracy.py` only, because real scales don't come with answers.
 
-**Never read `truth_daily.csv` in this code.** Only use it in tests to check your accuracy.
+## Quick start
+
+From the repo root, with the venv active:
+
+```bash
+# 1. No simulator data yet? Make a small 2-cat, 3-day sample with answer keys
+python -m sensors.sample_data
+
+# 2. Process it
+python -m sensors.run --readings sensors/output/sample/readings.csv
+
+# 3. Check accuracy against the answer keys
+python -m sensors.test_accuracy --truth-dir sensors/output/sample
+```
+
+Once Person 4's simulator works, just run `python -m sensors.run` and `python -m sensors.test_accuracy` (paths come from `.env`).
+
+Tested on a 60-day, 2-cat file (~218k readings, ~1 s): every drink, spill and litter visit found; water within ~1%, food within ~2%, litter visit counts exact, bowl-empty days flagged.
+
+## What's in `readings.csv`
+
+One row = one weight reading. All 4 cats and all 4 scales in one file:
+
+```
+cat_id, device, timestamp,           grams
+luna,   water,  2026-11-01T08:07:01, 498.0
+luna,   water,  2026-11-01T08:07:02, 495.2
+oscar,  litter, 2026-11-01T09:31:15, 10210.0
+```
+
+Readings are **not evenly spaced**, like real battery-saving scales:
+- **Quiet:** one check-in every hour (`HEARTBEAT_SEC=3600`)
+- **Busy** (cat touching the scale): one reading every second, starting a few seconds before and ending a few seconds after
+
+What you'll find in it:
+
+| Scale | Event | Looks like | You should |
+|---|---|---|---|
+| Food / water | Eat / drink | Wiggles 10–60 s, settles **lower** | Count the drop |
+| Food / water | Refill | Jumps **up** | Ignore |
+| Water | Evaporation | Tiny slow drop between check-ins | Don't count as drinking |
+| Food / water | **Knocked over** | Big drop in 1–2 s, or weight near 0 | Spill, don't count |
+| Food / water | **Bowl empty** | Sits at the empty-bowl weight | Flag it (not "cat stopped eating") |
+| Litter | Visit | Jumps up ~cat weight, wiggles 1–2 min, drops back | Count, time it |
+| Litter | Output | Box a bit heavier after the visit | Record the extra grams |
+| Litter | Scooping | Box drops with no cat | Ignore, reset starting weight |
+| Bed | Rest | Up by ~cat weight for hours | Session; night weight = cat weight |
+| All | Noise | ±0.5 g on every reading | Ignore |
 
 ## Files to build
 
 | File | Does |
 |---|---|
-| `stable.py` | Finds stable vs disturbed periods in a reading stream |
-| `bowls.py` | Food and water: eat/drink, refill, spill, evaporation |
-| `litter.py` | Litter visits, length, cat weight, output |
-| `bed.py` | Bed sessions, nightly weight, rest time |
+| `config.py` | Loads the numbers from `.env` (thresholds, file paths) |
+| `run.py` | Start button: loads data, runs every step, saves outputs. `python -m sensors.run` |
+| `stable.py` | Finds when the scale is quiet vs when the cat is touching it |
+| `bowls.py` | Food and water: eat/drink, refill, spill, empty bowl, evaporation |
+| `litter.py` | Litter visits, length, cat weight, output, scooping |
+| `bed.py` | Rest sessions, nightly weight, rest time |
 | `daily.py` | Events → one row per cat per day |
-| `run.py` | Runs everything: `python -m sensors.run` |
-| `test_accuracy.py` | Compares your `daily.csv` with `truth_daily.csv` |
+| `test_accuracy.py` | Compares your outputs with the answer keys |
+| `sample_data.py` | Makes a small test `readings.csv` + answer keys (not the real simulator) |
 
-## Step 1: stable vs disturbed (`stable.py`)
+## Step 0: start without waiting
 
-Everything builds on this. Readings are **not evenly spaced**: scales send fast bursts (1/s) only while the weight is changing, and a heartbeat every 5 minutes when stable.
+Don't wait for Person 4: `python -m sensors.sample_data` makes a realistic test file (Luna's bowl gets knocked over on day 2; Oscar has the litter emergency on day 3).
 
-- **Disturbed segment:** a run of readings less than `BURST_GAP_SEC` apart (a burst) whose weights vary by more than `STABLE_STD_G`
-- **Stable segment:** heartbeats and the quiet readings between bursts
+## Step 1: load (`run.py`)
 
-Give each stable segment one value: the median of its readings. The "before" value of a disturbance is the last stable value before the burst; "after" is the first stable value once it settles.
+- Read `readings.csv` with pandas; parse `timestamp` as datetime.
+- Group by `cat_id` and `device`, sort by time. Every later step works on **one cat's one scale** at a time.
 
-## Step 2: bowls (`bowls.py`): count decreases only
+## Step 2: quiet vs busy (`stable.py`)
 
-For each disturbed segment, compare the stable value **before** and **after**:
+Everything builds on this.
+
+- **Busy segment (burst):** readings less than `BURST_GAP_SEC` apart whose weights vary by more than `STABLE_STD_G`
+- **Quiet segment:** check-ins and the calm readings at the start and end of each burst
+
+For each busy segment, return:
+- **before** = median of the calm readings just before it
+- **after** = median of the calm readings once it settles
+- **start**, **end**, **duration**, and the **max/min** weight during it
+
+## Step 3: bowls (`bowls.py`): count decreases only
 
 ```
 change = after - before
 
-change < -MIN_CHANGE_G   → cat ate/drank |change| grams   (eat / drink event)
-change > +REFILL_MIN_G   → refill, ignore                  (refill event)
-otherwise                → bump or noise, ignore
+after  ≤ EMPTY_*_BOWL_G + MIN_CHANGE_G        → bowl empty or off the scale (spill / bowl_empty)
+change < -SPILL_MIN_G and duration < SPILL_MAX_SEC → knocked over (spill, not counted)
+change < -MIN_CHANGE_G                         → eat / drink |change| grams
+change > +REFILL_MIN_G                         → refill, ignore
+otherwise                                      → bump or noise, ignore
 ```
 
-Guards:
-- **Evaporation (water):** during long stable stretches, measure how fast the weight drifts down. Don't count it as drinking; optionally subtract it from the day's total.
-- **Spills:** a big drop where the disturbance is very short or looks unlike drinking → `spill` event, not counted.
+Check in that order. Also:
+- **Evaporation:** water drifts down slowly between check-ins. It never makes a burst, so it's ignored automatically. Optionally measure the drift rate and report it.
+- **Bowl empty:** if the bowl sits at its empty weight, write a `bowl_empty` event. The engine uses this to say "check the bowl" instead of "your cat isn't drinking."
 - **Water:** 1 g = 1 ml.
 
-## Step 3: litter box (`litter.py`)
+## Step 4: litter box (`litter.py`)
 
 ```
-stable baseline ──► jumps up by ~cat weight ──► wobbles ──► back to baseline + output
+starting weight ──► jumps up by ~cat weight ──► wobbles ──► back to starting weight + output
 ```
 
-For each disturbed segment where the jump ≥ `CAT_MIN_WEIGHT_G`:
+For each busy segment where the jump ≥ `CAT_MIN_WEIGHT_G`:
 - `litter_visit` event
 - **length** = segment duration
-- **cat weight** = median during the visit − baseline before
-- **output** = baseline after − baseline before (can be ~0)
-- **scooping** = a drop in baseline with no cat: ignore it, reset the baseline
+- **cat weight** = median during the visit − weight before
+- **output** = weight after − weight before (can be ~0: that's Oscar's emergency signal)
 
-## Step 4: bed (`bed.py`)
+A drop with **no** cat-sized jump = scooping. Ignore it and use the new, lower weight as the starting weight.
 
-- Session = reading above baseline by ≥ `CAT_MIN_WEIGHT_G`
-- **Nightly weight** = median of all stable readings during sessions between 22:00 and 07:00
+## Step 5: bed (`bed.py`)
+
+- **Session** = weight above the empty bed by ≥ `CAT_MIN_WEIGHT_G`
+- **Nightly weight** = median of readings during sessions between `NIGHT_START` and `NIGHT_END`
 - **Rest time** = total session minutes per day
-- **Stretch:** during a long still session, remove the slow trend and find the dominant frequency of the tiny wobble (FFT). Breaths per minute = that frequency × 60.
+- **Stretch:** the simulator may add one 60-second fast sample per night with a tiny breathing wobble. Remove the slow trend, find the strongest frequency (FFT), breaths per minute = frequency × 60.
 
-## Step 5: daily totals (`daily.py`)
+## Step 6: daily totals (`daily.py`)
 
-Sum and average events per cat per day into the columns in contract section 3.
+One row per cat per day, columns exactly as in contract section 3:
+
+| Column | How |
+|---|---|
+| `water_ml` | sum of `drink` |
+| `food_g` | sum of `eat` |
+| `litter_visits` | count of `litter_visit` |
+| `litter_avg_sec` | average visit length |
+| `litter_output_g` | sum of litter output |
+| `weight_kg` | nightly weight ÷ 1000 |
+| `rest_min` | sum of bed session minutes |
+| `sleep_breaths` | stretch goal; leave empty if not built |
+| `data_ok` | `false` if that day had a spill or empty bowl, so the engine won't raise a false alarm |
+
+Save events to `output/events.csv` and daily rows to `output/daily.csv`.
+
+## Step 7: check your work (`test_accuracy.py`)
+
+- **Events:** compare with `truth_events.csv`. Did you find the right drinks, meals, and visits? Within a few seconds and a few grams?
+- **Daily:** compare with `truth_daily.csv`. Print the % error per column.
+- If something's off, tune the numbers in `.env`, not the code.
 
 ## Done when
 
 - [ ] `python -m sensors.run` writes `events.csv` and `daily.csv`
 - [ ] Refills never count as eating or drinking
-- [ ] `test_accuracy.py` shows water and food within ~5% of truth, and the correct litter visit count
+- [ ] Knocked-over bowls are marked as spills, not drinking
+- [ ] Water and food within ~5% of truth; litter visit count exact
 - [ ] Oscar's last day shows many short visits with near-zero output
 
 ## Demo moment
 
-Show one day of raw water-bowl readings (messy line), then the same day with detected drinks marked and refills greyed out: "This is how a scale knows exactly how much your cat drank."
+Show one day of raw water-bowl readings (a messy line), then the same day with drinks marked, the refill greyed out, and a knocked-over bowl flagged: "This is how a scale knows exactly how much your cat drank, and when not to panic."
