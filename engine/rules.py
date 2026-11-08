@@ -41,6 +41,21 @@ def _big_enough(metric, rows, base, days_ago=1) -> bool:
     return abs(value - mean) / abs(mean) * 100 >= config.MIN_CHANGE_PCT.get(metric, 15)
 
 
+def _drifting(trends: dict, metric: str, direction: int) -> bool:
+    """Gentler trend check used for warning combinations.
+
+    direction = +1 for rising, -1 for falling. The metric must move at least half
+    its normal trend speed, beat 2x the noise, and have shifted 1+ std that way.
+    """
+    t = trends.get(metric)
+    if not t:
+        return False
+    full = config.TREND_PCT_OVERRIDE.get(metric, config.TREND_PCT_PER_WEEK)
+    bar = max(full / 2, 2 * t["noise_pct"])
+    return (t["pct_per_week"] * direction >= bar
+            and t["shift_z"] * direction >= 1.0)
+
+
 def decide(rows: pd.DataFrame, base: dict, z_recent: list[dict], trends: dict):
     """Return (level, findings). level is one of good / blip / vet / urgent."""
     z_today = z_recent[-1] if z_recent else {}
@@ -56,13 +71,6 @@ def decide(rows: pd.DataFrame, base: dict, z_recent: list[dict], trends: dict):
     # Eating under 40% of normal for 2+ days
     if _below_for_days(rows, "food_g", base, 0.4, 2):
         return "urgent", [_finding("not_eating", "food_g", rows, base)]
-
-    # Fast breathing while asleep for 2+ days (stretch goal: only if the column has data)
-    if "sleep_breaths" in rows.columns:
-        last2 = rows["sleep_breaths"].tail(2)
-        if last2.notna().all() and (last2 > 35).all():
-            return "urgent", [{"kind": "fast_breathing", "metric": "sleep_breaths",
-                               "value": float(last2.iloc[-1]), "usual": None}]
 
     # ---------------- 🟡 VET ----------------
     vet = []
@@ -86,14 +94,16 @@ def decide(rows: pd.DataFrame, base: dict, z_recent: list[dict], trends: dict):
         for m in odd_today:
             vet.append(_finding("multi", m, rows, base, z=z_today[m]))
 
-    # Drinking more AND peeing more together (kidney / diabetes / thyroid pattern)
-    w, o = trends.get("water_ml"), trends.get("litter_output_g")
-    # Each only needs half the normal trend speed, but must still beat 2x noise and have moved up
-    def rising(t):
-        bar = max(config.TREND_PCT_PER_WEEK / 2, 2 * t["noise_pct"])
-        return t["pct_per_week"] >= bar and t["shift_z"] >= 1.0
-    if w and o and rising(w) and rising(o):
+    # Warning combinations: two metrics drifting the same way at once.
+    # Each only needs half its normal trend speed, since two together is the signal.
+
+    # Drinking more AND leaving more in the litter box (kidney / diabetes / thyroid pattern)
+    if _drifting(trends, "water_ml", +1) and _drifting(trends, "litter_output_g", +1):
         vet.append(_finding("drink_and_pee", "water_ml", rows, base))
+
+    # Eating less AND losing weight (from the feature doc)
+    if _drifting(trends, "food_g", -1) and _drifting(trends, "weight_kg", -1):
+        vet.append(_finding("eat_less_lose_weight", "food_g", rows, base))
 
     if vet:
         # One finding per metric is enough for the explanation

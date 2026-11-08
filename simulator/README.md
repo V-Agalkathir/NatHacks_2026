@@ -2,8 +2,8 @@
 
 The simulator creates fake data for four cats and four scale devices. Its raw
 readings are designed to look like measurements from real scales, including
-activity bursts, quiet check-ins, sensor noise, refills, evaporation, litter
-output, and bed sessions.
+activity bursts, quiet check-ins, sensor noise, refills, litter output, and
+bed sessions.
 
 The `sensors/` project reads **only** `output/readings.csv`. The other generated
 files are metadata or ground truth for testing. Keep file columns and meanings
@@ -121,7 +121,7 @@ applies seeded daily variation to the baselines, then applies the cat's
 scenario. Daily columns are the section 3 fields in the data contract:
 
 `cat_id`, `date`, `water_ml`, `food_g`, `litter_visits`, `litter_avg_sec`,
-`litter_output_g`, `weight_kg`, `rest_min`, `sleep_breaths`.
+`litter_output_g`, `weight_kg`, `rest_min`, `data_ok`.
 
 `events.py` turns each daily row into the known events:
 
@@ -131,6 +131,8 @@ scenario. Daily columns are the section 3 fields in the data contract:
   daily visit length and output summing to the daily litter output.
 - Two bed-rest sessions whose durations sum to the daily rest time.
 - Periodic bowl refills and occasional spills.
+- Rare large bowl knock-overs, followed by a refill a few hours later, mark
+  that cat-day's `data_ok` as `False`. Small splashes leave it `True`.
 
 These events are written to `truth_events.csv`. They are the answer key for
 testing sensors. **Sensors must not read `truth_daily.csv` or
@@ -147,8 +149,7 @@ testing sensors. **Sensors must not read `truth_daily.csv` or
   second by default).
 - Each reading receives uniform sensor noise up to `NOISE_G` grams.
 - Bowl consumption lowers the bowl weight. Refills raise it to full weight.
-  Water also loses weight gradually through evaporation; spills cause
-  consumption-like drops without a cat.
+  Spills cause consumption-like drops without a cat.
 - A litter visit adds the cat's weight while it is in the box. When it leaves,
   the box baseline increases by the visit's output. The box is scooped once
   each day, resetting that baseline.
@@ -203,7 +204,7 @@ generated files in `output/`; the sensors team's `sensors/output/events.csv` and
 variation and scenario effects.
 
 ```csv
-cat_id,date,water_ml,food_g,litter_visits,litter_avg_sec,litter_output_g,weight_kg,rest_min,sleep_breaths
+cat_id,date,water_ml,food_g,litter_visits,litter_avg_sec,litter_output_g,weight_kg,rest_min,data_ok
 ```
 
 | Column | What this row's value means |
@@ -217,7 +218,7 @@ cat_id,date,water_ml,food_g,litter_visits,litter_avg_sec,litter_output_g,weight_
 | `litter_output_g` | Total litter output for that day, in grams. |
 | `weight_kg` | The cat's simulated weight for that day, in kilograms. |
 | `rest_min` | Total simulated time on the bed that day, in minutes. |
-| `sleep_breaths` | Blank; breathing-rate truth is not generated yet. |
+| `data_ok` | `True` unless a large bowl knock-over (100 g or more) makes that day's food or water readings unreliable. Small splashes do not affect it. |
 
 #### `output/truth_events.csv`
 
@@ -264,10 +265,9 @@ cat_id,device,timestamp,grams
 | `grams` | The scale's measured total weight in grams, including the bowl/contents, box/litter, or bed/cat as applicable. It is not the amount consumed. |
 
 For bowl events, compare the stable weight before and after the event to
-estimate consumption. A refill raises the measured weight; evaporation slowly
-lowers water-bowl weight. Litter readings include the box baseline and any
-litter output left behind. Bed readings include the bed baseline and the cat
-when present.
+estimate consumption. A refill raises the measured weight. Litter readings
+include the box baseline and any litter output left behind. Bed readings
+include the bed baseline and the cat when present.
 
 ## Settings
 
@@ -284,7 +284,6 @@ overrides them; `.env.example` documents the current values.
 | `BURST_SAMPLE_SEC` | `1` | Reading interval during scale activity, in seconds |
 | `HEARTBEAT_SEC` | `3600` | Reading interval while scale is stable, in seconds |
 | `NOISE_G` | `0.5` | Maximum absolute sensor noise, in grams |
-| `EVAPORATION_G_PER_HR` | `0.4` | Water lost to evaporation, in grams/hour |
 | `FOOD_BOWL_FULL_G` | `400` | Full food-bowl weight, container included |
 | `WATER_BOWL_FULL_G` | `900` | Full water-bowl weight, container included |
 | `LITTER_BOX_BASE_G` | `6000` | Empty litter-box scale baseline |
@@ -310,8 +309,8 @@ full run. Keep `SEED` the same to reproduce the same files.
    drink amounts should match `water_ml`, litter outputs should match
    `litter_output_g`, and visit counts should match `litter_visits`.
 7. Plot a water-bowl day and confirm consumption drops, refill jumps,
-   evaporation drift, and quiet hourly check-ins are visible. Plot a litter
-   day and confirm visits create plateaus, output raises the baseline, and
+   quiet hourly check-ins are visible. Plot a litter day and confirm visits
+   create plateaus, output raises the baseline, and
    scooping lowers it.
 8. Run the same command with the same settings and seed again; the generated
    files should be identical.
