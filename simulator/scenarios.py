@@ -59,7 +59,8 @@ def apply_scenario(
 
     days_since_onset = day_number - onset_day + 1
 
-    if scenario == "blip" and day_number == onset_day:
+    # One odd day, placed on the final day so the app shows it as "yesterday"
+    if scenario == "blip" and day_number == total_days:
         values["water_ml_day"] *= 1.35
     elif scenario == "slow_drinking":
         gradual_factor = 1.03**days_since_onset

@@ -43,6 +43,11 @@ DATA_FALLBACKS = [
     REPO_DIR / "simulator" / "output" / "truth_daily.csv",
     ENGINE_DIR / "sample_data" / "daily.csv",
 ]
+# Individual events (drinks, meals, litter visits, naps) for the "right now" mascot
+EVENTS_FALLBACKS = [
+    REPO_DIR / "sensors" / "output" / "events.csv",
+    REPO_DIR / "simulator" / "output" / "truth_events.csv",
+]
 CATS_FALLBACKS = [
     CATS_PATH,
     REPO_DIR / "simulator" / "output" / "cats.json",

@@ -92,6 +92,43 @@ def history(cat_id: str, days: int = 30) -> list[dict]:
     return rows.to_dict(orient="records")
 
 
+# Sensor event type -> mascot scene in the app
+SCENES = {"drink": "drink", "eat": "eat", "litter_visit": "litter", "bed_session": "sleep"}
+
+
+def now(cat_id: str) -> dict:
+    """The cat's most recent activity, for the app's animated mascot (GET /cats/{id}/now).
+
+    Returns {cat_id, scene, type, time, text}. scene is drink / eat / litter / sleep,
+    or idle when there are no events yet.
+    """
+    _find_cat(cat_id)
+    events = data.load_events()
+    result = {"cat_id": cat_id, "scene": "idle", "type": None, "time": None,
+              "text": "No activity recorded yet"}
+    if events is None:
+        return result
+    mine = events[(events["cat_id"] == cat_id) & events["type"].isin(SCENES)]
+    if mine.empty:
+        return result
+
+    e = mine.sort_values("start").iloc[-1]
+    clock = e["start"].strftime("%I:%M %p").lstrip("0")
+    amount = e.get("amount_g")
+    if e["type"] == "drink":
+        text = f"Drank {amount:.0f} ml at {clock}"
+    elif e["type"] == "eat":
+        text = f"Ate {amount:.0f} g at {clock}"
+    elif e["type"] == "litter_visit":
+        text = f"Used the litter box at {clock}"
+    else:
+        minutes = int((e["end"] - e["start"]).total_seconds() // 60)
+        text = f"Napping on the bed since {clock} ({minutes // 60} h {minutes % 60} min)"
+    result.update(scene=SCENES[e["type"]], type=e["type"],
+                  time=e["start"].strftime("%Y-%m-%dT%H:%M:%S"), text=text)
+    return result
+
+
 if __name__ == "__main__":
     print(f"Data: {data.data_source()}\n")
     if len(sys.argv) > 1:

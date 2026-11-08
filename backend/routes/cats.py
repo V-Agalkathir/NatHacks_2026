@@ -71,6 +71,16 @@ def get_cat_status(cat_id: str):
         raise HTTPException(status_code=404, detail=f"Unknown cat '{cat_id}'") from e
 
 
+@router.get("/{cat_id}/now")
+def get_cat_now(cat_id: str):
+    """GET /cats/{cat_id}/now -> latest activity (drink / eat / litter / sleep) for the mascot."""
+    cat_id = cat_id.lower()
+    try:
+        return engine_run.now(cat_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=f"Unknown cat '{cat_id}'") from e
+
+
 @router.get("/{cat_id}/history")
 def get_cat_history(
     cat_id: str,
