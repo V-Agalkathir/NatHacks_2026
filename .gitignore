@@ -15,10 +15,7 @@ dist/
 # Data and models
 simulator/output/*.csv
 simulator/output/*.json
-vision/models/*.pt
-vision/samples/
-vision/runs/
-vision/events.csv
+sensors/output/
 
 # OS
 .DS_Store

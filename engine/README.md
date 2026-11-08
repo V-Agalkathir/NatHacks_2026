@@ -2,7 +2,9 @@
 
 **Goal:** turn a cat's daily rows into one status (`good` / `blip` / `vet` / `urgent`) plus a short explanation.
 
-Input: `simulator/output/daily.csv`. Output: the status object in `docs/CONTRACT.md` section 3.
+Input: `sensors/output/daily.csv`. Output: the status object in `docs/CONTRACT.md` section 5.
+
+Until Person 1's `sensors/` works, point `DATA_PATH` at `simulator/output/truth_daily.csv` (same columns) so you're never blocked.
 
 ## Files to build
 
@@ -20,14 +22,15 @@ Input: `simulator/output/daily.csv`. Output: the status object in `docs/CONTRACT
 Check from most to least serious. First match wins.
 
 **🔴 urgent**
-- `litter_visits` z ≥ `URGENT_Z` **and** `litter_avg_sec` z ≤ −2 (many short visits: possible blockage)
+- `litter_visits` z ≥ `URGENT_Z` **and** `litter_output_g` below 30% of baseline (many visits, little output: possible blockage)
 - `food_g` below 40% of baseline for 2+ days
-- `sleep_breaths` above 35 for 2+ days
+- `sleep_breaths` above 35 for 2+ days (only if the stretch goal is built; skip empty values)
 
 **🟡 vet**
 - Any metric with a steady trend ≥ `TREND_PCT_PER_WEEK` for `TREND_WINDOW_DAYS`
 - Two or more metrics with z ≥ 2 at the same time
 - Weight down 5%+ from baseline
+- `water_ml` and `litter_output_g` both trending up (drinking more and peeing more together)
 
 **🔵 blip**
 - One metric with z ≥ `BLIP_Z` for 1–2 days, no trend

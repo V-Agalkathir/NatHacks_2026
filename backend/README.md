@@ -1,6 +1,6 @@
 # 🔌 Backend — Person 3
 
-**Goal:** a small FastAPI server that calls the engine and serves the JSON from `docs/CONTRACT.md` section 3.
+**Goal:** a small FastAPI server that calls the engine and serves the JSON from `docs/CONTRACT.md` section 5.
 
 ## Files to build
 

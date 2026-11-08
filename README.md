@@ -22,7 +22,7 @@ Purrcast learns what's normal for your cat and turns daily patterns into one sim
 
 ## Our Solution
 
-Purrcast combines a cat's daily signals (water, food, litter visits, activity, sleep, and weight) into one status:
+Purrcast uses four simple scales, under the food bowl, water bowl, litter box, and bed, to measure exactly how much a cat eats and drinks, when it uses the litter box, and what it weighs. It combines those signals into one status:
 
 | Status | Meaning | What the app says |
 |---|---|---|
@@ -39,7 +39,9 @@ Purrcast combines a cat's daily signals (water, food, litter visits, activity, s
 
 **Safety rule:** when in doubt, Purrcast always says "call your vet." It never tells owners they definitely don't need one.
 
-**Data for this hackathon:** real home sensor data from cats getting sick over months doesn't exist publicly, so we built a "virtual cat" simulator that generates realistic daily routines with injected health scenarios. Cat detection and eating/drinking recognition run on real images and video. Real sensors are our next step.
+**How the scales work:** bowls only count **decreases** in weight, so refills are ignored automatically. A litter visit shows up as a jump of about the cat's weight, and the box's weight gain afterwards estimates output. The bed scale gives a clean nightly weight.
+
+**Data for this hackathon:** we don't have hardware yet, and no public dataset of home pet-scale readings exists, so we simulate the **raw signal** real scales would produce, including noise, refills, evaporation, paw bumps, and spills. Our processing turns that signal into exact amounts, and the same code runs on real scales.
 
 ## Features
 
@@ -49,7 +51,7 @@ Purrcast combines a cat's daily signals (water, food, litter visits, activity, s
 - **Trend forecasting:** spots slow changes that would be invisible day to day
 - **Vet report:** a one-page summary to share at the appointment
 - **Push alerts:** notified only when something changes
-- **Camera demo:** a cat detected in its litter, food, and water zones
+- **Scale processing:** raw weight readings turned into exact amounts eaten, drunk, and output
 
 ## Demo
 
@@ -83,8 +85,9 @@ npm install
 ### Run the project
 
 ```bash
-# 1. Generate simulated cat data
-python simulator/generate.py --cats 3 --days 60
+# 1. Generate fake scale readings, then process them
+python simulator/generate.py
+python -m sensors.run
 
 # 2. Start the backend
 cd backend
@@ -99,8 +102,8 @@ npx expo start
 
 - **Mobile app:** React Native (Expo), TypeScript
 - **Backend:** Python, FastAPI
-- **Simulator and engine:** pandas, NumPy
-- **Vision:** YOLO (Ultralytics), OpenCV
+- **Simulator, sensor processing, and engine:** pandas, NumPy, SciPy
+- **Planned hardware:** load cells + HX711 amplifiers + ESP32
 - **Explanations:** LLM API (explains results only, never decides)
 
 ## Team
@@ -112,8 +115,6 @@ npx expo start
 
 ## Acknowledgements
 
-- **CAT BEHAVIOR dataset** by MASTER PROJECT on Roboflow Universe (CC BY 4.0), for eating and drinking recognition
-- **Ultralytics YOLO**, for cat detection
 - **VCA Animal Hospitals** home breathing rate guidance, for sleeping breathing rate thresholds
 - natHACKs 2026 organizers and mentors
 

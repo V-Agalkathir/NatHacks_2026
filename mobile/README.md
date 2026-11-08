@@ -49,7 +49,7 @@ export async function getStatus(catId: string) {
 }
 ```
 
-The response shape is in `docs/CONTRACT.md` section 3. Map each tile's `key` to an icon: `water` → `water`, `food` → `silverware-fork-knife`, `litter` → `toilet`, `sleep` → `sleep`.
+The response shape is in `docs/CONTRACT.md` section 5. Map each tile's `key` to an icon: `water` → `water`, `food` → `silverware-fork-knife`, `litter` → `toilet`, `weight` → `scale-bathroom`.
 
 If the API fails, fall back to mock data so the demo never breaks.
 

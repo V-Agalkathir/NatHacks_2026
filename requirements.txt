@@ -1,10 +1,10 @@
-# Shared Python deps for simulator, engine, backend, vision
+# Shared Python deps for simulator, sensors, engine, backend
 python-dotenv
 pandas
 numpy
+scipy
+matplotlib
 fastapi
 uvicorn[standard]
-ultralytics
-opencv-python-headless
 # Optional, only if USE_LLM=true
 google-genai

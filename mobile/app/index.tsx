@@ -22,7 +22,7 @@ const cat = {
     { label: "Water up", icon: "water" as IconName, ok: false },
     { label: "Food ok", icon: "silverware-fork-knife" as IconName, ok: true },
     { label: "Litter ok", icon: "toilet" as IconName, ok: true },
-    { label: "Sleep ok", icon: "sleep" as IconName, ok: true },
+    { label: "Weight ok", icon: "scale-bathroom" as IconName, ok: true },
   ],
   details: {
     changed: "Water 260 ml yesterday vs her usual 190 ml. Everything else normal.",
