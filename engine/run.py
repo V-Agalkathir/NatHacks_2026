@@ -32,10 +32,11 @@ def assess_rows(rows: pd.DataFrame, cat: dict) -> dict:
     if len(rows) <= config.BASELINE_DAYS or not base:
         result.update({
             "level": "good",
-            "message": f"Still learning {name}'s normal ({len(rows)} of {config.BASELINE_DAYS} days).",
+            "message": (f"Learning {name}'s usual patterns ({len(rows)} of {config.BASELINE_DAYS} days). "
+                        f"If you notice any symptoms, contact your vet."),
             "tiles": [{"key": k, "label": f"{k.capitalize()} learning", "ok": True}
                       for k in explain.TILE_GROUPS],
-            "details": {"changed": "Not enough data yet to compare against.",
+            "details": {"changed": "Not enough days yet to know what's usual for this cat.",
                         "maybe_nothing": "",
                         "call_if": explain.build_details("good", [], cat)["call_if"]},
         })
