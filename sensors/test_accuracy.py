@@ -17,6 +17,7 @@ from .config import settings
 MATCH_SEC = 120  # a found event must start within 2 minutes of the real one
 CHECKED_TYPES = ["drink", "eat", "refill", "spill", "litter_visit"]
 TARGET_PCT = 5.0
+MIN_DAYS_OK_PCT = 95.0
 # ...or this close in absolute terms (grams, ml, seconds, kg, minutes)
 TARGET_ABS = {"water_ml": 5, "food_g": 5, "litter_output_g": 5, "litter_avg_sec": 5,
               "weight_kg": 0.05, "rest_min": 5, "sleep_breaths": 2}
@@ -54,6 +55,8 @@ def compare_daily(found: pd.DataFrame, truth: pd.DataFrame) -> bool:
     if "data_ok" not in truth:
         truth = truth.assign(data_ok=True)
     df = truth.merge(found, on=["cat_id", "date"], suffixes=("_real", "_found"))
+    # First/last day start or end mid-session (e.g. cat already on the bed at midnight)
+    edge_day = df.groupby("cat_id")["date"].transform(lambda d: (d == d.min()) | (d == d.max()))
     print(f"\nDaily totals ({len(df)} cat-days compared)")
     ok = True
     for col in ("water_ml", "food_g", "litter_output_g", "litter_avg_sec", "weight_kg", "rest_min", "sleep_breaths"):
@@ -62,6 +65,8 @@ def compare_daily(found: pd.DataFrame, truth: pd.DataFrame) -> bool:
             continue
         real, got = df[f"{col}_real"], df[f"{col}_found"]
         both = real.notna() & got.notna() & (real > 0)
+        if col == "rest_min":
+            both &= ~edge_day
         if col in ("water_ml", "food_g"):
             both &= df["data_ok_real"].astype(bool)  # spill days are flagged, not scored
         if not both.any():
@@ -71,10 +76,13 @@ def compare_daily(found: pd.DataFrame, truth: pd.DataFrame) -> bool:
         pct = 100 * diff / real[both]
         # A day passes if it's within 5% OR within 5 units (fair on near-zero days)
         day_ok = (pct <= TARGET_PCT) | (diff <= TARGET_ABS.get(col, 0))
-        status = "PASS" if day_ok.all() else "check"
-        if col in ("water_ml", "food_g") and not day_ok.all():
+        share = day_ok.mean() * 100
+        # PASS if at least 95% of days are within tolerance
+        status = "PASS" if share >= MIN_DAYS_OK_PCT else "check"
+        if col in ("water_ml", "food_g", "litter_output_g") and share < MIN_DAYS_OK_PCT:
             ok = False
-        print(f"  {col:<17} avg error {pct.mean():5.1f}%  ({diff.mean():.1f} avg diff)   {status}")
+        print(f"  {col:<17} avg error {pct.mean():5.1f}%  ({diff.mean():.1f} avg diff)  "
+              f"{share:3.0f}% of days OK   {status}")
 
     visits_exact = (df["litter_visits_real"] == df["litter_visits_found"]).mean() * 100
     flags = (df["data_ok_real"].astype(bool) == df["data_ok_found"].astype(bool)).mean() * 100

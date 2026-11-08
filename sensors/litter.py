@@ -30,7 +30,14 @@ def litter_events(cat_id: str, times: pd.DatetimeIndex, grams: np.ndarray,
             # Ignore the half-stepping-in readings when estimating weight
             solid = b.grams - b.before >= 0.8 * rise
             cat_weight = float(np.median(b.grams[solid]) - b.before)
-            output = max(0.0, b.change)
+            # Output = settled weight after she stepped off minus settled weight
+            # before she stepped on, both from inside this burst. (The next
+            # check-in can be an hour later, after the owner scooped the box.)
+            idx = np.flatnonzero(on)
+            pre, post = b.grams[:idx[0]], b.grams[idx[-1] + 1:]
+            before = float(np.median(pre[-cfg.edge_readings:])) if len(pre) else b.before
+            after = float(np.median(post[-cfg.edge_readings:])) if len(post) else b.after
+            output = max(0.0, after - before)
             events.append({
                 "cat_id": cat_id, "device": "litter",
                 "start": on_times[0], "end": on_times[-1], "type": "litter_visit",
