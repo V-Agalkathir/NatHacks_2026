@@ -16,7 +16,6 @@ class ScaleSettings:
     burst_sample_sec: int = 1
     heartbeat_sec: int = 3600
     noise_g: float = 0.5
-    evaporation_g_per_hr: float = 0.4
     food_bowl_full_g: float = 400
     water_bowl_full_g: float = 900
     litter_box_base_g: float = 6000
@@ -30,8 +29,6 @@ class ScaleSettings:
             raise ValueError("heartbeat_sec must be greater than zero")
         if self.noise_g < 0:
             raise ValueError("noise_g cannot be negative")
-        if self.evaporation_g_per_hr < 0:
-            raise ValueError("evaporation_g_per_hr cannot be negative")
         if self.breath_amp_g < 0:
             raise ValueError("breath_amp_g cannot be negative")
 
@@ -106,6 +103,19 @@ def _simulate_device(
 
         if event_type in {"eat", "drink", "litter_visit"}:
             _add_samples(sample_times, start, end, settings.burst_sample_sec)
+            if event_type in {"eat", "drink"}:
+                _add_samples(
+                    sample_times,
+                    start - timedelta(seconds=3),
+                    start,
+                    settings.burst_sample_sec,
+                )
+                _add_samples(
+                    sample_times,
+                    end,
+                    end + timedelta(seconds=3),
+                    settings.burst_sample_sec,
+                )
         elif event_type in {"refill", "spill"}:
             _add_samples(sample_times, start, end, settings.burst_sample_sec)
         elif event_type == "bed_session":
@@ -153,6 +163,8 @@ def _simulate_device(
         "food": settings.food_bowl_full_g,
         "water": settings.water_bowl_full_g,
     }.get(device, 0.0)
+    empty_bowl_weight = {"food": 150.0, "water": 300.0}.get(device, 0.0)
+    bowl_knocked_over = False
     litter_baseline = settings.litter_box_base_g
     previous_timestamp = simulation_start
     rows: list[dict[str, object]] = []
@@ -161,11 +173,8 @@ def _simulate_device(
         elapsed_sec = (timestamp - previous_timestamp).total_seconds()
         if device in {"food", "water"} and elapsed_sec > 0:
             current_weight -= sum(active_consumption.values()) * elapsed_sec
-            if device == "water":
-                current_weight -= (
-                    settings.evaporation_g_per_hr * elapsed_sec / 3600
-                )
-            current_weight = max(0.0, current_weight)
+            minimum_weight = empty_bowl_weight  # a bowl can't weigh less than the empty container
+            current_weight = max(minimum_weight, current_weight)
 
         if timestamp in scoop_times:
             litter_baseline = settings.litter_box_base_g
@@ -198,8 +207,19 @@ def _simulate_device(
                     else settings.water_bowl_full_g
                 )
                 current_weight = full_weight
+                bowl_knocked_over = False
             elif event_type == "spill":
-                current_weight = max(0.0, current_weight - float(event["amount_g"]))
+                if float(event["amount_g"]) >= 100:
+                    bowl_knocked_over = True
+                    current_weight = max(
+                        empty_bowl_weight,
+                        current_weight - float(event["amount_g"]),
+                    )
+                else:
+                    current_weight = max(
+                        empty_bowl_weight,
+                        current_weight - float(event["amount_g"]),
+                    )
             elif event_type == "litter_visit":
                 active_visits[index] = event
             elif event_type == "bed_session":
