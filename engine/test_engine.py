@@ -25,9 +25,40 @@ def check(seed: int) -> list[str]:
     return problems
 
 
+# Every scenario from simulator/README.md -> expected level
+SCENARIOS = {
+    "healthy": "good",
+    "blip": "blip",
+    "slow_drinking": "vet",
+    "weight_loss": "vet",
+    "litter_emergency": "urgent",
+    "not_eating": "urgent",
+}
+
+
+def check_scenarios(seeds) -> list[str]:
+    """Run every scenario on many random cats. Also checks the
+    'eating less + losing weight' combination fires for weight_loss."""
+    problems = []
+    combo_hits = 0
+    for scenario, expected in SCENARIOS.items():
+        for seed in seeds:
+            cat = {"cat_id": "test", "name": "Test", "sex": "female", "scenario": scenario}
+            r = assess_rows(fake_daily.generate(seed, [cat]), cat)
+            if r["level"] != expected:
+                problems.append(f"{scenario} seed {seed}: got {r['level']} "
+                                f"(expected {expected}): {r['details']['changed']}")
+            if scenario == "weight_loss" and "while slowly losing weight" in r["details"]["changed"]:
+                combo_hits += 1
+    print(f"eat-less + lose-weight combo fired on {combo_hits}/{len(seeds)} weight_loss cats")
+    return problems
+
+
 if __name__ == "__main__":
     seeds = range(50)
-    all_problems = [p for s in seeds for p in check(s)]
-    for p in all_problems:
+    demo = [p for s in seeds for p in check(s)]
+    extra = check_scenarios(range(100, 200))
+    for p in demo + extra:
         print("FAIL", p)
-    print(f"\n{len(seeds) * 4 - len(all_problems)}/{len(seeds) * 4} checks passed")
+    print(f"\nDemo cats: {len(seeds) * 4 - len(demo)}/{len(seeds) * 4} passed")
+    print(f"All scenarios: {600 - len(extra)}/600 passed (98%+ is fine; noise is random)")

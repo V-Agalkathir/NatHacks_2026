@@ -89,13 +89,12 @@ def generate(seed: int = 42, cats: list[dict] = CATS) -> pd.DataFrame:
         n = _normal(rng)
         for d in range(DAYS):
             row = _apply_scenario(_day(rng, n), cat["scenario"], d)
-            row.update(cat_id=cat["cat_id"], date=first_day + timedelta(days=d),
-                       sleep_breaths=None)        # stretch goal, left empty
+            row.update(cat_id=cat["cat_id"], date=first_day + timedelta(days=d))
             rows.append(row)
     df = pd.DataFrame(rows)
     df["date"] = pd.to_datetime(df["date"])
     cols = ["cat_id", "date", "water_ml", "food_g", "litter_visits", "litter_avg_sec",
-            "litter_output_g", "weight_kg", "rest_min", "sleep_breaths"]
+            "litter_output_g", "weight_kg", "rest_min"]
     return df[cols].round({"water_ml": 1, "food_g": 1, "litter_avg_sec": 1,
                            "litter_output_g": 1, "weight_kg": 3, "rest_min": 1})
 
