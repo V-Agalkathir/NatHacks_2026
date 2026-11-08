@@ -173,7 +173,7 @@ def _simulate_device(
         elapsed_sec = (timestamp - previous_timestamp).total_seconds()
         if device in {"food", "water"} and elapsed_sec > 0:
             current_weight -= sum(active_consumption.values()) * elapsed_sec
-            minimum_weight = empty_bowl_weight if bowl_knocked_over else 0.0
+            minimum_weight = empty_bowl_weight  # a bowl can't weigh less than the empty container
             current_weight = max(minimum_weight, current_weight)
 
         if timestamp in scoop_times:
@@ -217,7 +217,7 @@ def _simulate_device(
                     )
                 else:
                     current_weight = max(
-                        empty_bowl_weight if bowl_knocked_over else 0.0,
+                        empty_bowl_weight,
                         current_weight - float(event["amount_g"]),
                     )
             elif event_type == "litter_visit":
