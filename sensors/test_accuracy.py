@@ -27,6 +27,8 @@ def compare_events(found: pd.DataFrame, truth: pd.DataFrame):
     print(f"{'type':<14}{'real':>6}{'found':>7}{'matched':>9}{'missed':>8}{'extra':>7}{'avg amount err':>16}")
     for type_ in CHECKED_TYPES:
         t = truth[truth["type"] == type_].copy()
+        if type_ == "spill":  # small splashes are deliberately ignored
+            t = t[t["amount_g"] >= settings.spill_min_g]
         if type_ == "refill":  # small top-ups are deliberately ignored
             t = t[t["amount_g"] >= settings.refill_min_g]
         f = found[found["type"] == type_].copy()
@@ -49,10 +51,15 @@ def compare_events(found: pd.DataFrame, truth: pd.DataFrame):
 
 
 def compare_daily(found: pd.DataFrame, truth: pd.DataFrame) -> bool:
+    if "data_ok" not in truth:
+        truth = truth.assign(data_ok=True)
     df = truth.merge(found, on=["cat_id", "date"], suffixes=("_real", "_found"))
     print(f"\nDaily totals ({len(df)} cat-days compared)")
     ok = True
     for col in ("water_ml", "food_g", "litter_output_g", "litter_avg_sec", "weight_kg", "rest_min", "sleep_breaths"):
+        if f"{col}_real" not in df or f"{col}_found" not in df:
+            print(f"  {col:<17} not in answer key, skipped")
+            continue
         real, got = df[f"{col}_real"], df[f"{col}_found"]
         both = real.notna() & got.notna() & (real > 0)
         if col in ("water_ml", "food_g"):

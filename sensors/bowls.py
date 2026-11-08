@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 
 from .config import Settings
-from .stable import find_bursts
+from .stable import busy_mask, find_bursts
 
 
 def _event(cat_id, device, start, end, type_, amount):
@@ -31,15 +31,22 @@ def bowl_events(cat_id: str, device: str, times: pd.DatetimeIndex, grams: np.nda
     empty = cfg.empty_food_bowl_g if device == "food" else cfg.empty_water_bowl_g
     events = []
 
-    for b in find_bursts(times, grams, cfg):
+    bursts = find_bursts(times, grams, cfg)
+    for b in bursts:
         change = b.change
         ends_empty = b.after <= empty + cfg.min_change_g
-        if change < -cfg.spill_min_g and (b.duration <= cfg.spill_max_sec or ends_empty):
+        if change < -cfg.spill_min_g:  # no cat drinks 100 g at once
             events.append(_event(cat_id, device, b.busy_start, b.busy_end, "spill", -change))
         elif change < -cfg.min_change_g:
             events.append(_event(cat_id, device, b.busy_start, b.busy_end, consume, -change))
         elif change > cfg.refill_min_g:
             events.append(_event(cat_id, device, b.busy_start, b.busy_end, "refill", change))
+
+    # Big sudden drops with only 1-2 readings (no full burst): knocked-over bowl
+    busy = busy_mask(times, bursts)
+    for i in np.flatnonzero(np.diff(grams) <= -cfg.spill_min_g) + 1:
+        if not busy[i] and not busy[i - 1]:
+            events.append(_event(cat_id, device, times[i], times[i], "spill", grams[i - 1] - grams[i]))
 
     events.extend(_empty_periods(cat_id, device, times, grams, empty, cfg))
     return events
