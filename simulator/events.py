@@ -153,13 +153,15 @@ def _make_bed_events(
 def _make_bowl_maintenance_events(
     rows: list[dict[str, Any]], rng: random.Random, result: list[dict[str, object]]
 ) -> None:
-    """Schedule periodic refills and occasional spills as known events."""
+    """Schedule refills, small splashes, and rare bowl knock-overs."""
     by_cat: dict[str, list[dict[str, Any]]] = {}
     for row in rows:
         by_cat.setdefault(str(row["cat_id"]), []).append(row)
 
     for cat_id, cat_rows in by_cat.items():
         cat_rows.sort(key=lambda row: str(row["date"]))
+        next_knockover_day = rng.randint(21, 28)
+        knockover_device = rng.choice(("food", "water"))
         for device in ("food", "water"):
             next_refill_day = rng.randint(2, 3)
             for day_number, row in enumerate(cat_rows, start=1):
@@ -172,6 +174,36 @@ def _make_bowl_maintenance_events(
                         _event(cat_id, device, refill_at, 1, "refill")
                     )
                     next_refill_day += rng.randint(1, 2)
+
+                if (
+                    day_number == next_knockover_day
+                    and device == knockover_device
+                ):
+                    spill_at = day_start + timedelta(
+                        seconds=rng.randrange(8 * 60 * 60, 17 * 60 * 60)
+                    )
+                    spill_amount = 250.0 if device == "food" else 600.0
+                    result.append(
+                        _event(
+                            cat_id,
+                            device,
+                            spill_at,
+                            1,
+                            "spill",
+                            amount_g=spill_amount,
+                        )
+                    )
+                    result.append(
+                        _event(
+                            cat_id,
+                            device,
+                            spill_at + timedelta(hours=rng.randint(2, 4)),
+                            1,
+                            "refill",
+                        )
+                    )
+                    next_knockover_day += rng.randint(21, 28)
+                    knockover_device = rng.choice(("food", "water"))
 
                 if rng.random() < 1 / 7:
                     spill_at = day_start + timedelta(
