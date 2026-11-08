@@ -22,7 +22,6 @@ LABELS = {
     "litter_output_g": ("Litter output", "g"),
     "weight_kg": ("Weight", "kg"),
     "rest_min": ("Rest time", "min"),
-    "sleep_breaths": ("Sleeping breathing rate", "breaths/min"),
 }
 
 # The 4 tiles on the home screen and which metrics feed each one
@@ -58,7 +57,6 @@ MAYBE_NOTHING = {
 URGENT_SHORT = {
     "litter_blockage": "is going to the litter box a lot with almost no output",
     "not_eating": "has barely eaten for 2 days",
-    "fast_breathing": "is breathing fast while asleep",
 }
 
 
@@ -96,14 +94,15 @@ def describe(f: dict, cat: dict) -> str:
         pct = (1 - value / usual) * 100 if value and usual else 0
         return f"Weight is {fmt('weight_kg', value)} vs {pos} usual {fmt('weight_kg', usual)} ({pct:.0f}% down)."
     if kind == "drink_and_pee":
-        return "Drinking more and peeing more at the same time."
+        return "Drinking more and leaving more in the litter box at the same time."
+    if kind == "eat_less_lose_weight":
+        return (f"Eating less ({fmt('food_g', value)} yesterday vs {pos} usual {fmt('food_g', usual)}) "
+                f"while slowly losing weight.")
     if kind == "litter_blockage":
         return (f"{value:.0f} litter visits yesterday (usually about {usual:.0f}) "
                 f"with almost no output.")
     if kind == "not_eating":
         return f"Ate only {fmt('food_g', value)} yesterday vs {pos} usual {fmt('food_g', usual)}."
-    if kind == "fast_breathing":
-        return f"Sleeping breathing rate {value:.0f} breaths/min for 2 nights (over 35 is a warning sign)."
     # spike / multi: one day's value vs normal
     when = "yesterday" if f.get("days_ago", 1) == 1 else "2 days ago"
     return f"{label} {fmt(f['metric'], value)} {when} vs {pos} usual {fmt(f['metric'], usual)}."
