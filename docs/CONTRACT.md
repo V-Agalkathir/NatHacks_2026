@@ -4,13 +4,15 @@ This is the one file that lets four people build in parallel. **Don't change it 
 
 ## Who owns what
 
-| Folder | Owner | Builds |
-|---|---|---|
-| `simulator/` | Person 2 | Fake scale hardware: raw weight readings |
-| `sensors/` | Person 1 | Raw readings → events → daily totals |
-| `engine/` | Person 3 | Baseline, anomaly, trend, status rules |
-| `backend/` | Person 3 | FastAPI that serves results to the app |
-| `mobile/` | Person 4 | The Expo phone app |
+| Person | Team | Folder | Branch | Builds |
+|---|---|---|---|---|
+| 1 | Mobile | `mobile/` | `mobile` | The Expo phone app |
+| 2 | Backend | `engine/` | `engine` | Baseline, anomaly, trend, status rules |
+| 3 | Backend | `backend/` | `backend` | FastAPI routes, mock mode, vet report |
+| 4 | Data | `simulator/` | `simulator` | Fake scale hardware: raw weight readings |
+| 5 | Data | `sensors/` | `sensors` | Raw readings → events → daily totals |
+
+**Stay in your own folder.** That way branches almost never conflict.
 
 ```
 simulator ─► output/readings.csv ─► sensors ─► output/events.csv

@@ -1,4 +1,6 @@
-# 📱 Mobile app — Person 4
+# 📱 Mobile app — Person 1
+
+**Branch:** `mobile` · **Gets data from:** Person 3 (backend)
 
 **Goal:** the phone app owners use. Colourful, minimal, icons over numbers. Details only when they tap "See more."
 

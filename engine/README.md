@@ -1,10 +1,12 @@
-# 🧠 Engine — Person 3
+# 🧠 Engine — Person 2 (backend pair)
+
+**Branch:** `engine` · **Pair:** Person 3 (backend) · **Depends on:** Person 5 (`sensors/`)
 
 **Goal:** turn a cat's daily rows into one status (`good` / `blip` / `vet` / `urgent`) plus a short explanation.
 
 Input: `sensors/output/daily.csv`. Output: the status object in `docs/CONTRACT.md` section 5.
 
-Until Person 1's `sensors/` works, point `DATA_PATH` at `simulator/output/truth_daily.csv` (same columns) so you're never blocked.
+Until Person 5's `sensors/` works, point `DATA_PATH` at `simulator/output/truth_daily.csv` (same columns) so you're never blocked.
 
 ## Files to build
 
@@ -53,6 +55,17 @@ Write template sentences first so the app works without any API key. If `USE_LLM
 - [ ] `python -m engine.run` prints all 4 cats and their levels
 - [ ] Every result has `message`, `tiles`, and `details`
 - [ ] Works with `USE_LLM=false`
+
+## Handoff to Person 3
+
+Agree on this one function early, then Person 3 can call it from the API:
+
+```python
+from engine.run import assess
+assess("luna")  # -> dict matching docs/CONTRACT.md section 5
+```
+
+Person 3 owns `explain.py`'s LLM option if you want to split it; you own `rules.py`.
 
 ## Tip
 

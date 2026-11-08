@@ -1,4 +1,6 @@
-# 🔌 Backend — Person 3
+# 🔌 Backend — Person 3 (backend pair)
+
+**Branch:** `backend` · **Pair:** Person 2 (engine) · **Serves:** Person 1 (mobile)
 
 **Goal:** a small FastAPI server that calls the engine and serves the JSON from `docs/CONTRACT.md` section 5.
 
@@ -21,7 +23,7 @@ Then open http://localhost:8000/docs for the auto-generated API page.
 
 ## Day 1 trick: mock first
 
-Before the engine is ready, make `/cats/{id}/status` return the hard-coded example from the contract. Person 4 can then connect the app immediately, and you swap in `engine.run.assess(cat_id)` later. Nobody waits on anybody.
+Before the engine is ready, make `/cats/{id}/status` return the hard-coded example from the contract. Person 1 can then connect the app immediately, and you swap in Person 2's `engine.run.assess(cat_id)` later. Nobody waits on anybody.
 
 ## Reaching it from a phone (WSL)
 
@@ -31,7 +33,7 @@ Phones can't see `localhost` inside WSL. Run:
 npx localtunnel --port 8000
 ```
 
-Send the URL it prints to Person 4 for `mobile/.env`.
+Send the URL it prints to Person 1 for `mobile/.env`.
 
 ## Done when
 

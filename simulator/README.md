@@ -1,4 +1,6 @@
-# 🐱 Simulator — Person 2
+# 🐱 Simulator — Person 4 (data pair)
+
+**Branch:** `simulator` · **Pair:** Person 5 (sensors) · **Feeds:** Person 5, and Person 2 via `truth_daily.csv`
 
 **Goal:** pretend to be four real scales. Produce the raw, messy weight readings that real hardware would send, including cats that slowly or suddenly get sick.
 
@@ -92,4 +94,4 @@ At `SAMPLE_SEC=5`, 4 devices × 4 cats × 60 days is about 2.8 million rows. Tha
 - [ ] Plotting one litter day shows visits as plateaus and the baseline creeping up
 - [ ] Same `SEED` → identical files
 
-**Ship a small sample early** (2 cats, 3 days) so Person 1 can start building `sensors/` right away.
+**Ship a small sample early** (2 cats, 3 days) so Person 5 can start building `sensors/` right away. Also tell Person 2 when `truth_daily.csv` exists; the engine can run on it before `sensors/` is done.

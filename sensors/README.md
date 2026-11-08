@@ -1,4 +1,8 @@
-# ⚖️ Sensors — Person 1
+# ⚖️ Sensors — Person 5 (data pair)
+
+**Branch:** `sensors` · **Pair:** Person 4 (simulator) · **Feeds:** Person 2 (engine)
+
+Waiting on Person 4's sample? Hand-write a tiny `readings.csv` (one water bowl, a few drinks and one refill) and start on `stable.py` and `bowls.py` right away.
 
 **Goal:** turn raw scale readings into real amounts: how much the cat ate and drank, when it used the litter box, and what it weighs. This is the code that would run on real hardware.
 

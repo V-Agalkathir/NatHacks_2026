@@ -66,6 +66,7 @@ cd mobile && npx expo start --tunnel
 
 ## Git workflow
 
-- Each person works on their own branch: `sim`, `sensors`, `engine`, `mobile`.
+- Each person works on their own branch: `mobile`, `engine`, `backend`, `simulator`, `sensors` (see `docs/CONTRACT.md`).
+- Commit only your folder: `git add <your-folder>/`, not `git add .`
 - Merge into `main` at the end of each day after a quick check.
 - Only touch your own folder. Changes to `docs/CONTRACT.md` need a team heads-up.
