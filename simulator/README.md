@@ -63,7 +63,12 @@ Default cats:
 
 ## Step 3: raw readings (`scale.py`)
 
-One reading per device every `SAMPLE_SEC` seconds. Every reading gets small sensor noise (±`NOISE_G`).
+Real scales save battery by only reporting when something happens. Do the same:
+
+- **While the weight is changing** (cat at the bowl, in the litter box, getting on or off the bed): one reading every `BURST_SAMPLE_SEC` (1 s).
+- **While stable:** one heartbeat every `HEARTBEAT_SEC` (5 min). Evaporation and slow drift show up in these.
+
+Every reading gets small sensor noise (±`NOISE_G`).
 
 **Food and water bowls**
 - Start each bowl at a full weight (container + contents).
@@ -81,11 +86,11 @@ One reading per device every `SAMPLE_SEC` seconds. Every reading gets small sens
 **Bed**
 - Baseline = bed weight.
 - Sessions: reading rises by the cat's weight for long stretches, mostly at night.
-- Stretch goal: add a tiny wave (±`BREATH_AMP_G`) at the breathing rate while the cat lies still.
+- Stretch goal: once per night, add a 60-second high-rate sample (10 readings/s) with a tiny wave (±`BREATH_AMP_G`) at the breathing rate, so `sensors/` can measure it.
 
-## Size tip
+## Size check
 
-At `SAMPLE_SEC=5`, 4 devices × 4 cats × 60 days is about 2.8 million rows. That's fine for pandas, but if it's slow, use `SAMPLE_SEC=10` or 30 days while developing.
+With bursts + heartbeats you should get roughly **700 rows per device per day**, about **670,000 rows (~25 MB)** for 4 cats × 60 days. If you're far above that, you're probably sampling continuously by mistake. Don't commit `readings.csv` to git (it's in `.gitignore`); share it in the team chat or regenerate it with the same `SEED`.
 
 ## Done when
 
@@ -93,5 +98,6 @@ At `SAMPLE_SEC=5`, 4 devices × 4 cats × 60 days is about 2.8 million rows. Tha
 - [ ] Plotting one water bowl day shows drinks (drops), a refill (jump up), and slow evaporation
 - [ ] Plotting one litter day shows visits as plateaus and the baseline creeping up
 - [ ] Same `SEED` → identical files
+- [ ] `readings.csv` is around 25 MB, not hundreds
 
 **Ship a small sample early** (2 cats, 3 days) so Person 5 can start building `sensors/` right away. Also tell Person 2 when `truth_daily.csv` exists; the engine can run on it before `sensors/` is done.

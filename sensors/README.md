@@ -25,11 +25,12 @@ Output: `output/events.csv` (section 2) and `output/daily.csv` (section 3).
 
 ## Step 1: stable vs disturbed (`stable.py`)
 
-Everything builds on this. Slide a window of `STABLE_WINDOW_SEC` over the readings:
-- **Stable:** standard deviation in the window < `STABLE_STD_G`
-- **Disturbed:** anything else (the cat is touching the scale)
+Everything builds on this. Readings are **not evenly spaced**: scales send fast bursts (1/s) only while the weight is changing, and a heartbeat every 5 minutes when stable.
 
-Group readings into alternating stable / disturbed segments. Each stable segment gets one value: its median.
+- **Disturbed segment:** a run of readings less than `BURST_GAP_SEC` apart (a burst) whose weights vary by more than `STABLE_STD_G`
+- **Stable segment:** heartbeats and the quiet readings between bursts
+
+Give each stable segment one value: the median of its readings. The "before" value of a disturbance is the last stable value before the burst; "after" is the first stable value once it settles.
 
 ## Step 2: bowls (`bowls.py`): count decreases only
 

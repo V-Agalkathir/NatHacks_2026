@@ -32,7 +32,7 @@ The `sensors/` code is what would run on real scales later. Only `simulator/` ge
 
 ## 1. Raw readings (simulator → sensors)
 
-File: `simulator/output/readings.csv`. One row per reading, one reading per device every `SAMPLE_SEC` seconds.
+File: `simulator/output/readings.csv`. One row per reading. Like real battery-powered scales, each device sends a **burst** (one reading every `BURST_SAMPLE_SEC`) only while its weight is changing, plus a **heartbeat** every `HEARTBEAT_SEC` when stable. Readings are **not** evenly spaced. Expect ~700 rows per device per day (~25 MB for 4 cats × 60 days).
 
 | Column | Type | Example |
 |---|---|---|
