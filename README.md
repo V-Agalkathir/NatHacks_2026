@@ -4,6 +4,10 @@
 >
 > **One-line summary:** A mobile app that watches your cat's everyday patterns and tells you, in plain language, whether a change is nothing, worth watching, worth a vet visit, or urgent.
 
+## 👋 For the team
+
+Start here: [`docs/SETUP.md`](docs/SETUP.md) → [`docs/CONTRACT.md`](docs/CONTRACT.md) → [`docs/PLAN.md`](docs/PLAN.md) → the `README.md` in your own folder.
+
 ## Overview
 
 Cats are experts at hiding illness. Owners notice small changes all the time (drinking a bit more, skipping a meal, an extra trip to the litter box) and face the same question every time: **is this worth a vet visit, or am I overreacting?**
@@ -68,7 +72,7 @@ git clone [repo-url]
 cd purrcast
 
 # Backend
-cd backend
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
 # Mobile app

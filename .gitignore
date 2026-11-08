@@ -1,0 +1,25 @@
+# Secrets
+.env
+!.env.example
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Node / Expo
+node_modules/
+.expo/
+dist/
+
+# Data and models
+simulator/output/*.csv
+simulator/output/*.json
+vision/models/*.pt
+vision/samples/
+vision/runs/
+vision/events.csv
+
+# OS
+.DS_Store
+Thumbs.db
