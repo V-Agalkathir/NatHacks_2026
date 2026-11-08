@@ -25,7 +25,7 @@ DAILY_COLUMNS = (
     "litter_output_g",
     "weight_kg",
     "rest_min",
-    "sleep_breaths",
+    "data_ok",
 )
 
 
@@ -48,7 +48,6 @@ def _read_settings() -> tuple[int, int, date, int, Path, ScaleSettings]:
         burst_sample_sec=int(os.getenv("BURST_SAMPLE_SEC", "1")),
         heartbeat_sec=int(os.getenv("HEARTBEAT_SEC", "3600")),
         noise_g=float(os.getenv("NOISE_G", "0.5")),
-        evaporation_g_per_hr=float(os.getenv("EVAPORATION_G_PER_HR", "0.4")),
         food_bowl_full_g=float(os.getenv("FOOD_BOWL_FULL_G", "400")),
         water_bowl_full_g=float(os.getenv("WATER_BOWL_FULL_G", "900")),
         litter_box_base_g=float(os.getenv("LITTER_BOX_BASE_G", "6000")),
@@ -120,10 +119,23 @@ def generate_daily_rows(
                     "litter_output_g": round(adjusted["litter_output_g_day"], 2),
                     "weight_kg": round(adjusted["weight_kg"], 3),
                     "rest_min": round(adjusted["bed_min_day"], 2),
-                    "sleep_breaths": "",
+                    "data_ok": True,
                 }
             )
     return rows
+
+
+def _mark_unreliable_spill_days(
+    daily_rows: list[dict[str, Any]], events: list[dict[str, object]]
+) -> None:
+    """Mark days with a large bowl spill as unreliable; small splashes are OK."""
+    unreliable_days = {
+        (str(event["cat_id"]), str(event["start"])[:10])
+        for event in events
+        if event["type"] == "spill" and float(event["amount_g"] or 0) >= 100
+    }
+    for row in daily_rows:
+        row["data_ok"] = (str(row["cat_id"]), str(row["date"])) not in unreliable_days
 
 
 def _make_cats_json() -> list[dict[str, object]]:
@@ -141,6 +153,7 @@ def main() -> None:
     days, seed, start_date, onset_day, output_dir, scale_settings = _read_settings()
     daily_rows = generate_daily_rows(days, seed, start_date, onset_day)
     events = generate_events(daily_rows, seed + 1)
+    _mark_unreliable_spill_days(daily_rows, events)
     readings = generate_readings(events, start_date, days, seed + 2, scale_settings)
 
     paths = (
