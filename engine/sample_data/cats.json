@@ -1,0 +1,30 @@
+[
+  {
+    "cat_id": "mochi",
+    "name": "Mochi",
+    "age": 4,
+    "sex": "female",
+    "scenario": "healthy"
+  },
+  {
+    "cat_id": "luna",
+    "name": "Luna",
+    "age": 8,
+    "sex": "female",
+    "scenario": "blip"
+  },
+  {
+    "cat_id": "tiger",
+    "name": "Tiger",
+    "age": 11,
+    "sex": "male",
+    "scenario": "slow_drinking"
+  },
+  {
+    "cat_id": "oscar",
+    "name": "Oscar",
+    "age": 6,
+    "sex": "male",
+    "scenario": "litter_emergency"
+  }
+]
