@@ -66,10 +66,27 @@ def _apply_scenario(row: dict, scenario: str, d: int) -> dict:
     elif scenario == "slow_drinking" and k > 0:
         row["water_ml"] *= 1.03 ** k               # ~3%/day more water
         row["litter_output_g"] *= 1.03 ** k        # and more output
+        row["litter_visits"] = round(row["litter_visits"] * 1.025 ** k)  # and more visits
         row["weight_kg"] *= 1 - 0.002 * k          # slow weight drift down
     elif scenario == "weight_loss" and k > 0:
         row["weight_kg"] *= 1 - 0.003 * k
         row["food_g"] *= 1 - 0.01 * k
+    elif scenario == "diabetes" and k > 0:
+        row["water_ml"] *= 1.035 ** k
+        row["litter_output_g"] *= 1.035 ** k
+        row["litter_visits"] = round(row["litter_visits"] * 1.03 ** k)
+        row["food_g"] *= 1.02 ** k
+        row["weight_kg"] *= 0.997 ** k
+    elif scenario == "hyperthyroid" and k > 0:
+        row["food_g"] *= 1.025 ** k
+        row["water_ml"] *= 1.01 ** k
+        row["weight_kg"] *= 0.997 ** k
+    elif scenario == "dental" and k > 0:
+        row["food_g"] *= 0.98 ** k
+        row["weight_kg"] *= 0.998 ** k
+    elif scenario == "growing":                    # kitten: everything grows from day 1
+        for m in ("weight_kg", "food_g", "water_ml", "litter_output_g"):
+            row[m] *= 1.005 ** (d + 1)
     elif scenario == "litter_emergency" and d >= last - 1:
         row["litter_visits"] *= 4                  # many visits...
         row["litter_avg_sec"] *= 0.3               # ...short ones...

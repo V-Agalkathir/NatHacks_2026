@@ -16,11 +16,12 @@ from routes.cats import get_cat_status
 
 router = APIRouter(prefix="/cats", tags=["report"])
 
+# The app shows 3 colours. "blip" (one unusual day) is shown as green with a note.
 LEVEL_LABELS = {
-    "good": "All good",
-    "blip": "Minor blip",
-    "vet": "Worth a vet visit",
-    "urgent": "Call your vet now",
+    "good": "Everything looks normal",
+    "blip": "Everything looks normal (one unusual day noted)",
+    "vet": "Changes worth checking",
+    "urgent": "Urgent attention needed",
 }
 
 
@@ -30,7 +31,7 @@ def get_vet_report(cat_id: str):
     cat_id = cat_id.lower()
 
     # 1. Get the status (reuses get_cat_status so MOCK_MODE and 404s work the same way)
-    status = get_cat_status(cat_id)
+    status = get_cat_status(cat_id, None)
 
     # 2. Get the last 14 days of daily totals from the engine
     try:

@@ -1,7 +1,7 @@
 """Per-cat metadata and healthy daily baselines.
 
-Age and sex are recorded for the cat profile only. They are not used in
-simulation calculations.
+Age and sex are recorded for the cat profile; the engine uses age for
+age-aware checks (kittens are expected to eat and drink more as they grow).
 """
 
 CAT_METADATA = {
@@ -9,6 +9,11 @@ CAT_METADATA = {
     "luna": {"name": "Luna", "age": 7, "sex": "female"},
     "lena": {"name": "Lena", "age": 5, "sex": "female"},
     "oscar": {"name": "Oscar", "age": 9, "sex": "male"},
+    "bella": {"name": "Bella", "age": 11, "sex": "female"},
+    "milo": {"name": "Milo", "age": 13, "sex": "male"},
+    "coco": {"name": "Coco", "age": 8, "sex": "female"},
+    "nala": {"name": "Nala", "age": 6, "sex": "female"},
+    "pip": {"name": "Pip", "age": 0.5, "sex": "male"},
 }
 
 CAT_BASELINES = {
@@ -47,5 +52,50 @@ CAT_BASELINES = {
         "litter_output_g_day": 165, # Combined urine/feces weight
         "weight_kg": 5.4,           # Large frame
         "bed_min_day": 900,         # 15 hours (900 mins)
+    },
+    "bella": {
+        "water_ml_day": 220,        # 4.4 kg senior
+        "food_g_day": 72,
+        "litter_visits_day": 3,
+        "litter_avg_sec": 50,
+        "litter_output_g_day": 130,
+        "weight_kg": 4.4,
+        "bed_min_day": 840,
+    },
+    "milo": {
+        "water_ml_day": 200,        # 4.0 kg senior
+        "food_g_day": 65,
+        "litter_visits_day": 3,
+        "litter_avg_sec": 45,
+        "litter_output_g_day": 115,
+        "weight_kg": 4.0,
+        "bed_min_day": 900,
+    },
+    "coco": {
+        "water_ml_day": 190,        # 3.9 kg adult
+        "food_g_day": 64,
+        "litter_visits_day": 3,
+        "litter_avg_sec": 45,
+        "litter_output_g_day": 110,
+        "weight_kg": 3.9,
+        "bed_min_day": 780,
+    },
+    "nala": {
+        "water_ml_day": 200,        # 4.0 kg adult
+        "food_g_day": 66,
+        "litter_visits_day": 3,
+        "litter_avg_sec": 48,
+        "litter_output_g_day": 115,
+        "weight_kg": 4.0,
+        "bed_min_day": 780,
+    },
+    "pip": {
+        "water_ml_day": 120,        # 2.0 kg, 6-month-old kitten (grows during the sim)
+        "food_g_day": 55,           # kittens eat more per kg than adults
+        "litter_visits_day": 3,
+        "litter_avg_sec": 35,
+        "litter_output_g_day": 80,
+        "weight_kg": 2.0,
+        "bed_min_day": 960,
     },
 }
