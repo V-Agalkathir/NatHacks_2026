@@ -189,6 +189,9 @@ def describe(f: dict, cat: dict) -> str:
         return "No litter box visits in the last day."
     if kind == "not_eating_any_cat":
         return "Almost nothing eaten for 2 days in a row."
+    if kind == "eating_half":
+        return (f"Eating under half of {pos} usual for 3 days in a row: {fmt('food_g', value)} "
+                f"on the last day vs {pos} usual {fmt('food_g', usual)}.")
     if kind == "litter_blockage":
         return (f"{value:.0f} litter visits in the last day (usually about {usual:.0f}), "
                 f"most of them very short.")
@@ -238,6 +241,9 @@ def build_message(level: str, findings: list[dict], cat: dict) -> str:
         if f["kind"] == "no_visits":
             return (f"{name} hasn't used the litter box in the last day. A cat that can't pee "
                     f"may have a blockage. {tail}")
+        if f["kind"] == "eating_half":
+            return (f"{name} has eaten less than half of {pronouns(cat)['pos']} usual amount "
+                    f"for 3 days in a row. {tail}")
         if f["kind"] == "not_eating_any_cat":
             return f"{name} has eaten almost nothing for 2 days in a row. {tail}"
         return f"{name} shows a warning pattern. {tail}"
@@ -276,7 +282,7 @@ def build_tiles(level: str, findings: list[dict], last_row) -> list[dict]:
             word = "many visits"
         elif hit["kind"] == "no_visits":
             word = "no visits"
-        elif hit["kind"] == "not_eating_any_cat":
+        elif hit["kind"] in ("not_eating_any_cat", "eating_half"):
             word = "almost none"
         elif hit["kind"] == "high_start":
             word = "high"
