@@ -364,6 +364,10 @@ Stop anything with `Ctrl + C`.
 
 Cornell Feline Health Center. (2017, October 16). *Chronic kidney disease*. Cornell University College of Veterinary Medicine. [https://www.vet.cornell.edu/departments-centers-and-institutes/cornell-feline-health-center/health-information/feline-health-topics/chronic-kidney-disease](https://www.vet.cornell.edu/departments-centers-and-institutes/cornell-feline-health-center/health-information/feline-health-topics/chronic-kidney-disease)
 
+Cornell Feline Health Center. (2017, October 11). Hyperthyroidism in cats. Cornell University College of Veterinary Medicine. https://www.vet.cornell.edu/departments-centers-and-institutes/cornell-feline-health-center/health-information/feline-health-topics/hyperthyroidism-cats
+
+Conroy, M., Brodbelt, D. C., O’Neill, D., Chang, Y.-M., & Elliott, J. (2019). Chronic kidney disease in cats attending primary care practice in the UK: A VetCompassTM study. The Veterinary Record, 184(17), 526. https://doi.org/10.1136/vr.105100 
+
 
 ## Acknowledgements
 
