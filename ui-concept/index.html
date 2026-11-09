@@ -288,11 +288,25 @@ body.has-tabs .tabbar { display: grid; }
 .live-dot.on { background: var(--green); animation: livepulse 1.6s ease-in-out infinite; }
 @keyframes livepulse { 50% { box-shadow: 0 0 0 5px rgba(127,216,164,.35); } }
 .live .now { box-shadow: none; border-width: 2.5px; }
-.live-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-.live-cell { text-align: center; border: 2.5px solid var(--ink); border-radius: 16px; padding: 6px 2px; font-size: 13px; transition: background .3s; }
-.live-cell svg { width: 26px; height: 26px; display: block; margin: 0 auto 2px; }
-.live-cell b { display: block; font-size: 15px; }
-.live-cell.busy { background: var(--butter); }
+.live .now .stage { height: 240px; }
+/* The 4 scales: one row each, tap to open the details */
+.live-list { display: flex; flex-direction: column; gap: 8px; }
+.live-row { border: 2.5px solid var(--ink); border-radius: 16px; background: var(--paper); transition: background .3s; }
+.live-row.busy { background: var(--butter); }
+.live-row summary { list-style: none; display: flex; align-items: center; gap: 10px; min-height: 54px; padding: 8px 14px;
+  cursor: pointer; font-size: 17px; font-weight: 600; -webkit-tap-highlight-color: transparent; }
+.live-row summary::-webkit-details-marker { display: none; }
+.live-row summary svg { width: 30px; height: 30px; flex: none; }
+.live-row .state { font-size: 13px; font-weight: 700; background: var(--ink); color: var(--paper); border-radius: 999px; padding: 2px 9px; }
+.live-row .state:empty { display: none; }
+.live-row .val { margin-left: auto; font-size: 17px; }
+.live-row .chev { width: 10px; height: 10px; flex: none; margin: -5px 2px 0 4px; border-right: 3px solid var(--ink);
+  border-bottom: 3px solid var(--ink); transform: rotate(45deg); transition: transform .2s; }
+.live-row[open] .chev { transform: rotate(-135deg); margin-top: 5px; }
+.live-more { display: flex; flex-direction: column; gap: 8px; padding: 2px 14px 14px 54px; }
+.live-more p { display: flex; justify-content: space-between; gap: 12px; margin: 0; font-size: 15px; color: var(--ink-soft); }
+.live-more b { color: var(--ink); text-align: right; }
+@media (prefers-reduced-motion: reduce) { .live-row .chev { transition: none; } }
 .live-pair { display: flex; flex-direction: column; gap: 8px; background: var(--paper); border: var(--line) solid var(--ink);
   border-radius: 20px; padding: 12px 14px; box-shadow: var(--pop-sm); }
 .live-pair .row { display: flex; gap: 10px; align-items: stretch; }
@@ -1087,13 +1101,21 @@ $("pair-back").addEventListener("click", () => {
    engine; this card shows what's happening right now. */
 const BROKER = params.get("broker") || "wss://broker.hivemq.com:8884/mqtt";
 const MQTT_JS = "https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js";
+const LIVE_SCENE = { food: "eat", water: "drink", litter: "litter", bed: "sleep" };
+const LIVE_BUSY = { food: "Eating", water: "Drinking", litter: "In use", bed: "Napping" };
+const LIVE_TODAY_LABEL = { food: "Eaten today", water: "Drunk today", litter: "Visits today", bed: "Cat's weight" };
+// Which scale rows are open (kept when the screen redraws)
+document.addEventListener("toggle", e => {
+  const id = e.target.dataset && e.target.dataset.dev; if (!id) return;
+  e.target.open ? live.open.add(id) : live.open.delete(id);
+}, true);
 const LIVE_DEVICES = [
   { id: "food", icon: "food", label: "Food" }, { id: "water", icon: "water", label: "Water" },
   { id: "litter", icon: "litter", label: "Litter" }, { id: "bed", icon: "bed", label: "Bed" },
 ];
 const CAT_ON_G = 1500;      // a jump this big on the litter box or bed = the cat is on it
 const SEGMENT_END_MS = 2500; // no reading for this long = the burst is over
-const live = { code: null, client: null, online: false, offline: false, lastMsg: 0, lastT: 0, dev: {}, events: [], scene: null, boot: null };
+const live = { open: new Set(), code: null, client: null, online: false, offline: false, lastMsg: 0, lastT: 0, dev: {}, events: [], scene: null, boot: null };
 
 // Forget everything seen so far (the simulation restarted, or the owner tapped Reset)
 // Live data is saved with the cat (daily totals, recent activity), so closing the app keeps it.
@@ -1355,11 +1377,20 @@ function ago(t) {
 function liveCard(cat) {
   liveConnect(cat.live).catch(() => {});   // (a new connection clears the live state first...)
   loadLive(cat);                            // (...then this cat's saved live data is loaded)
+  live.scene = null;                        // a fresh card: draw the cat again
   return `<div class="live" id="live">
     <div class="live-head"><span class="live-dot" id="live-dot"></span><span id="live-label">Live from the scales</span><span class="code">${esc(cat.live)}</span>
       <button class="link-btn" id="live-reset" style="padding:0 0 0 6px;font-size:14px">Reset</button></div>
     <div class="now"><div id="live-stage"></div><div><p class="what" id="live-what"></p><p class="when" id="live-when"></p></div></div>
-    <div class="live-grid">${LIVE_DEVICES.map(d => `<div class="live-cell" id="live-${d.id}">${ICONS[d.icon]}${d.label}<b>—</b></div>`).join("")}</div>
+    <div class="live-list">${LIVE_DEVICES.map(d => `
+      <details class="live-row" id="live-${d.id}" data-dev="${d.id}"${live.open.has(d.id) ? " open" : ""}>
+        <summary>${ICONS[d.icon]}<span>${d.label}</span><span class="state"></span><b class="val">—</b><span class="chev" aria-hidden="true"></span></summary>
+        <div class="live-more">
+          <p><span>On the scale now</span><b data-k="now">—</b></p>
+          <p><span>${LIVE_TODAY_LABEL[d.id]}</span><b data-k="today">—</b></p>
+          <p><span>Last activity</span><b data-k="last">—</b></p>
+        </div>
+      </details>`).join("")}</div>
     <ul class="earlier" id="live-events" aria-label="Live activity"></ul>
   </div>`;
 }
@@ -1378,10 +1409,20 @@ function updateLive() {
   if (n.scene !== live.scene) { $("live-stage").innerHTML = mascot(n.scene, n.what, cat.coat); live.scene = n.scene; }
   $("live-what").textContent = n.what;
   $("live-when").textContent = n.when;
+  // The 4 scale rows: weight now, today's total, last activity, and a badge while the cat is on it
+  const T = liveLog(cat).days[dateKey(Date.now())] || {};
+  const today = { food: `${Math.round(T.food_g || 0)} g`, water: `${Math.round(T.water_ml || 0)} ml`,
+                  litter: `${T.litter_visits || 0}`, bed: T.weight_kg ? fmtWeight(T.weight_kg) : "—" };
   for (const d of LIVE_DEVICES) {
-    const s = live.dev[d.id], cell = $(`live-${d.id}`);
-    cell.querySelector("b").textContent = s && s.g != null ? `${Math.round(s.g)} g` : "—";
-    cell.classList.toggle("busy", !!(s && s.busy));
+    const s = live.dev[d.id], row = $(`live-${d.id}`); if (!row) continue;
+    const g = s && s.g != null ? `${Math.round(s.g)} g` : "—", busy = !!(s && (s.busy || s.since != null));
+    const e = live.events.find(e => e.scene === LIVE_SCENE[d.id]);
+    row.querySelector(".val").textContent = g;
+    row.querySelector("[data-k=now]").textContent = g;
+    row.querySelector("[data-k=today]").textContent = today[d.id];
+    row.querySelector("[data-k=last]").textContent = e ? `${e.text}, ${ago(e.at)}` : "Nothing yet";
+    row.querySelector(".state").textContent = busy ? LIVE_BUSY[d.id] : "";
+    row.classList.toggle("busy", busy);
   }
   $("live-events").innerHTML = live.events.slice(n.scene === "idle" && live.events.length ? 1 : 0, 4).map(e =>
     `<li>${ICONS[SCENE_ICON[e.scene]] || ""}<span>${esc(e.text)} <span class="soft">(${ago(e.at)})</span></span></li>`).join("");

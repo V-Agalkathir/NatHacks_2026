@@ -2,274 +2,191 @@
 
 > **NatHacks 2026**
 >
-> **One-line summary:** An integrated feline health-monitoring system that tracks eating, drinking, litter box activity, and body weight to identify potentially concerning changes in a cat's everyday behaviour.
+> **In one line:** Smart scales under a cat's food bowl, water bowl, litter box and bed, plus an app that learns what's normal for *your* cat and tells you when something changes.
 
-## 👋 For the team
+## 📱 Try it on your phone (for judges)
 
-Start here:
+No download or sign-up with us needed. It runs in your phone's browser.
 
-[`docs/SETUP.md`](docs/SETUP.md) → [`docs/CONTRACT.md`](docs/CONTRACT.md) → [`docs/PLAN.md`](docs/PLAN.md) → the `README.md` in your own folder.
+### 1. Open the app
 
-## Overview
+| What you want to see | Link |
+|---|---|
+| **The full app** (60 days of example data) | [v-agalkathir.github.io/NatHacks_2026/ui-concept](https://v-agalkathir.github.io/NatHacks_2026/ui-concept/) |
+| **The live hardware demo** (real-time readings from our simulated scales) | [v-agalkathir.github.io/NatHacks_2026/ui-concept/?live=PURR-7F3A](https://v-agalkathir.github.io/NatHacks_2026/ui-concept/?live=PURR-7F3A) |
 
-Cats are remarkably good at concealing signs of pain and illness. Changes in their everyday behaviour can be subtle, gradual, and difficult for owners to recognize.
+**Optional: add it to your home screen** so it opens like a normal app:
 
-In particular, conditions such as chronic kidney disease (CKD) can cause changes in water consumption, urination, appetite, energy levels, and body weight. These changes may develop before an owner recognizes that something is wrong.
+- **iPhone (Safari):** tap the **Share** button → **Add to Home Screen**.
+- **Android (Chrome):** tap **⋮** → **Add to Home screen** (or **Install app**).
 
-**Purrcast aims to make these changes easier to recognize.**
+Everything you enter stays on your phone only.
 
-Purrcast is an integrated hardware and software ecosystem that monitors four important aspects of a cat's daily routine:
+### 2. Walk through the full app
 
-- Food consumption
-- Water consumption
-- Litter box activity
-- Body weight
+1. Tap **Create account**. Any name, email and password works (it's only saved on your phone).
+2. **Add a cat:** name, age, weight, and an optional photo. The cartoon cat takes the colour of the photo.
+3. **Pair the scales:** tap **Scan all 4 scales**, then **Start learning**. (This pretends to find the 4 scales.)
+4. You're now on **"Learning your cat's routine"** (days 1 to 14). The app shows what the cat ate, drank, how often it used the litter box, and its weight.
+5. Tap **Skip to day 60** to jump ahead. Now the app compares each day with what's normal for this cat.
+6. Look around:
+   - **Home:** one simple message (all good, one odd day, worth a vet visit, or urgent), plus what the cat did last.
+   - **Dashboard:** a chart for food, water, litter visits and weight. Use the **‹ ›** buttons or the slider at the top to move through the days and see when a message first appears.
+   - **Profile → Demo box:** switch between 11 example cats to see every kind of message.
 
-Using weight-sensing hardware integrated beneath a cat's existing food bowl, water bowl, litter box, and sleeping area, Purrcast collects everyday measurements and combines them into one personalized health-monitoring dashboard.
+**Good example cats to try** (Profile → Demo box):
 
-Rather than forcing owners to interpret multiple measurements independently, Purrcast establishes an individual baseline for each cat, monitors changes over time, and highlights patterns that may warrant attention.
+| Cat | What happens | What the app says |
+|---|---|---|
+| **Mochi** | healthy | Everything looks normal |
+| **Luna** | drinks a lot more on one day | One unusual day, we'll keep watching |
+| **Lena** | slowly drinks more and visits the litter box more | Changes worth checking (vet visit) |
+| **Oscar** | suddenly uses the litter box 20 times a day | Urgent: contact a vet now |
+| **Simba** | urgent problem while the app is still learning (day 5) | Urgent alerts work from day 1 |
 
-Our goal is simple: **help cat owners recognize potentially concerning changes earlier by making everyday health monitoring effortless.**
+### 3. The live hardware demo
 
-## The Problem
+The second link connects to our **simulated ESP32 and 4 scales** running in [Wokwi](https://wokwi.com) (an online electronics simulator). Our team runs it during the demo.
 
-### 1. Cats conceal signs of illness
+- When we move a slider in Wokwi (the cat eats, drinks, steps into the litter box, or lies on the bed), your phone shows it within a few seconds: the cartoon cat acts it out, and the activity is added to the list.
+- Tap **Food, Water, Litter or Bed** to open that scale: weight right now, today's total, and the last activity.
+- If the simulation is stopped, the card says **"Scales offline"**. When it starts again, the app catches up on anything it missed.
+- If something worrying shows up (for example 10 litter box visits in one day), the screen switches to the alert.
 
-Unlike humans, cats cannot communicate when something feels wrong. They may continue their everyday routines despite experiencing discomfort or developing an illness.
+To run the Wokwi simulation yourself, see [`hardware/wokwi/README.md`](hardware/wokwi/README.md).
 
-As a result, owners may not recognize gradual behavioural changes until symptoms become more noticeable.
+## Why we built this
 
-### 2. Important health indicators go unnoticed
+Cats are very good at hiding when they feel sick. Changes in their daily habits are often small and slow, so owners usually notice too late.
 
-Many health conditions can affect a cat's everyday activities.
+Many common illnesses show up first as changes in habits. For example, **chronic kidney disease (CKD)** can make a cat:
 
-Chronic kidney disease (CKD), for example, can involve:
+- drink more water,
+- pee more,
+- eat less,
+- lose weight,
+- sleep more or groom less.
 
-- Increased water consumption.
-- Increased urine production.
-- Changes in appetite.
-- Weight loss.
-- Lethargy and changes in grooming.
+CKD affects up to **40% of cats over 10** and **80% of cats over 15** (Cornell Feline Health Center). Older cats need the most watching.
 
-According to the Cornell Feline Health Center, CKD affects up to 40% of cats over 10 years old and 80% of cats over 15 years old.
+The problem: today you'd need separate gadgets for feeding, drinking, the litter box and weight, each with its own app, and none of them tell you whether a change is normal for *your* cat.
 
-These changes are particularly important to monitor in senior cats.
+## What Purrcast does
 
-### 3. Existing monitoring solutions are fragmented
+**Purrcast spots changes early.** It does not diagnose illness.
 
-Smart pet products already collect useful information about cats, but monitoring is often distributed across separate devices and applications.
+### Four scales, one app
 
-Owners may need different products to monitor feeding, drinking, litter box activity, and weight.
+| Scale | Goes under | What it measures |
+|---|---|---|
+| **Food** | the food bowl | how much the cat eats |
+| **Water** | the water bowl | how much the cat drinks |
+| **Litter** | the litter box | how often the cat goes, and how long it stays |
+| **Bed** | the cat's bed | the cat's weight, measured every time it lies down |
 
-Purrcast aims to bring these measurements together into one unified system that interprets changes in relation to the individual cat's normal behaviour.
+The scales go **under the things the cat already uses**, so the cat's routine doesn't change.
 
-## Our Solution
+### How it works, step by step
 
-Purrcast combines four weight-sensing components with a centralized mobile application.
+1. **The scales measure.** Each scale reports its weight when something changes (a drop in the water bowl, a jump on the litter box).
+2. **We clean up the readings.** Refills, spills, a paw on the bowl, or water slowly evaporating are not counted as eating or drinking.
+3. **We add up each day.** At the end of the day, all the readings become one row: grams eaten, ml drunk, litter visits, and weight.
+4. **We learn what's normal.** The first 14 days build this cat's own "normal range". A big cat and a small cat have very different normals.
+5. **We compare every new day** with the normal range. We look for:
+   - **one odd day** (could be nothing, so we keep watching),
+   - **a slow change** over a week or more (for example drinking a bit more every week),
+   - **an emergency pattern**, like many litter visits with almost nothing left behind, or not eating. These alerts work from day 1, even while still learning.
+6. **The owner gets one simple message**, with what we noticed and what to do. No graphs to read.
 
-### The Four Monitoring Components
-
-**1. Food Consumption**
-
-A weight sensor beneath the existing food bowl monitors changes in food weight to estimate how much food the cat consumes.
-
-**2. Water Consumption**
-
-A weight sensor beneath the existing water bowl monitors changes in water weight to estimate daily water consumption.
-
-**3. Litter Box Activity**
-
-A weight sensor beneath the litter box detects changes associated with litter box visits and monitors activity patterns over time.
-
-Additional processing may help identify changes in the weight of the litter box contents, although accurately distinguishing urine, feces, litter changes, and other disturbances requires further validation.
-
-**4. Daily Body Weight**
-
-A weight-sensing platform integrated beneath the cat's sleeping area aims to capture automatic weight measurements during periods of rest.
-
-This allows owners to monitor gradual weight changes without having to manually weigh their cats.
-
-### One Unified Dashboard
-
-All four measurements feed into one application, where owners can:
-
-- View their cat's daily eating and drinking habits.
-- Monitor litter box activity.
-- Track daily body weight.
-- Compare current measurements against individual historical baselines.
-- Identify unusual changes and longer-term trends.
-- Receive notifications when potentially concerning patterns emerge.
-
-The goal is to make health monitoring simple enough that owners do not need to interpret complicated graphs or constantly check multiple applications.
-
-## How It Works
-
-### 1. Data Collection
-
-Weight sensors continuously or periodically collect measurements from the four monitored environments.
-
-### 2. Signal Processing
-
-Raw sensor readings are processed to account for environmental disturbances and distinguish meaningful changes from ordinary fluctuations.
-
-Examples include:
-
-- Food and water refills.
-- Water evaporation.
-- Spillage.
-- Paw contact and movement.
-- Changes in litter box weight.
-
-### 3. Individual Baseline Development
-
-Purrcast establishes a personalized understanding of each cat's normal behaviour.
-
-Instead of relying exclusively on universal thresholds, the system compares measurements against the individual cat's historical patterns.
-
-### 4. Change Detection
-
-The system monitors deviations from normal behaviour and looks for changes that persist over time or occur across multiple measurements.
-
-For example:
-
-A gradual increase in water consumption combined with increased litter box activity and declining body weight may represent a pattern worth discussing with a veterinarian.
-
-### 5. Personalized Health Insights
-
-The mobile application presents the information in simple language, helping owners understand:
-
-- What has changed?
-- How significant is the change compared with their cat's baseline?
-- Has the change persisted?
-- Should they consider contacting their veterinarian?
-
-**Important:** Purrcast identifies potentially concerning changes. It does not diagnose diseases or replace professional veterinary assessment.
-
-## Multi-Cat Households
-
-Purrcast is designed with individual cat profiles in mind.
-
-Each cat should have its own profile containing its historical measurements and behavioural baseline.
-
-In the initial prototype, we assume that measurements from each monitored environment can be attributed to a known cat.
-
-However, shared resources in multi-cat households introduce an identification challenge.
-
-Potential future approaches include:
-
-- Microchip-based identification.
-- Weight-pattern recognition.
-- Camera-assisted cat recognition.
-
-Individual identification in shared environments is an important area for future hardware and software development.
-
-## Competitive Landscape
-
-Existing smart pet products demonstrate that owners are interested in monitoring their pets' everyday activities.
-
-However, Purrcast aims to differentiate itself through the integration of multiple measurements into one monitoring ecosystem.
-
-| Product                               | Primary functionality                                    |
-| ------------------------------------- | -------------------------------------------------------- |
-| SureFeed Microchip Pet Feeder Connect | Individualized feeding and food consumption monitoring   |
-| Petivity Smart Litter Box Monitor     | Litter box activity monitoring                           |
-| **Purrcast**                          | Food, water, litter activity, and body weight monitoring |
-
-### Our Differentiation
-
-**1. Integrated Monitoring**
-
-Four different measurements are brought together within one ecosystem.
-
-**2. Personalized Interpretation**
-
-Purrcast compares changes against an individual cat's historical behaviour rather than simply presenting raw measurements.
-
-**3. Convenience**
-
-The hardware is designed to integrate beneath existing household pet equipment, minimizing changes to the owner's daily routine.
-
-**4. Accessibility**
-
-We aim to offer a more affordable alternative to purchasing multiple specialized monitoring devices.
-
-Our pricing advantage remains a target to validate through hardware prototyping, manufacturing estimates, and competitor research.
-
-## Technical Architecture
-
-### Current Technology Stack
-
-- **Mobile application:** React Native (Expo), TypeScript; plus a cartoon web app concept (`ui-concept/`, HTML/CSS/JS, installable on phones)
-- **Backend:** Python, FastAPI
-- **Data processing:** pandas, NumPy, SciPy
-- **Sensor simulation:** Python
-- **Hardware (planned):** Load cells, HX711 amplifiers, ESP32 microcontrollers
-- **Health interpretation:** Rule-based change detection, with optional LLM-generated explanations
-
-### Hardware Design
-
-Each monitoring component is intended to use weight sensors to collect measurements from its respective environment.
-
-The planned hardware architecture includes:
-
-- Load cells to measure weight changes.
-- HX711 amplifiers to convert sensor signals.
-- ESP32 microcontrollers to collect and transmit readings.
-- A backend system to process and analyze measurements.
-
-### Data Processing and Interpretation
-
-The processing pipeline aims to:
-
-1. Convert raw sensor readings into usable measurements.
-2. Account for noise and environmental disturbances.
-3. Estimate food and water consumption.
-4. Monitor litter box activity and weight changes.
-5. Track daily body weight.
-6. Compare measurements against individual baselines.
-7. Identify persistent or combined behavioural changes.
-
-Where AI is used, its role is to explain already-determined findings in accessible language, not independently diagnose conditions or determine medical urgency.
-
-## Current Prototype and Development Scope
-
-For NatHacks 2026, we are developing a software prototype that demonstrates the intended data collection, processing, and interpretation pipeline.
-
-We do not currently have a completed physical hardware system.
-
-Since publicly available datasets containing the specific raw measurements needed for our proposed setup are limited, we simulate raw sensor readings to demonstrate the processing pipeline.
-
-The simulator can incorporate disturbances such as:
-
-- Food and water refills.
-- Paw contact.
-- Spillage.
-- Changes in measured weight.
-
-The objective is to demonstrate how raw measurements can be transformed into meaningful monitoring data.
-
-Our longer-term goal is to connect the same processing architecture to physical sensors, subject to hardware testing and calibration.
-
-## Future Development
-
-Potential areas of future development include:
-
-- Physical hardware integration and calibration.
-- Reliable individual cat identification in multi-cat households.
-- Improved litter output measurement.
-- More sophisticated behavioural trend detection.
-- Personalized monitoring recommendations based on veterinary research.
-- Veterinary report generation.
-- Historical health data and long-term trend visualization.
-- Optional integrations with veterinary clinics and existing pet health platforms.
-
-## Demo
-
-- **App on your phone:** [v-agalkathir.github.io/NatHacks_2026/ui-concept](https://v-agalkathir.github.io/NatHacks_2026/ui-concept/) (open it, then **Add to Home Screen**)
-- **Live hardware demo:** [v-agalkathir.github.io/NatHacks_2026/ui-concept/?live=PURR-7F3A](https://v-agalkathir.github.io/NatHacks_2026/ui-concept/?live=PURR-7F3A) (start the Wokwi simulation in [`hardware/wokwi/`](hardware/wokwi/) first)
-- **Video:** [Add demonstration link]
-
-## Getting Started
+| Message | Meaning |
+|---|---|
+| 🟢 **Everything looks normal** | Habits are in the usual range |
+| 🟢 **One unusual day** | Something was different once. We'll keep watching for 48 hours |
+| 🟡 **Changes worth checking** | A change that keeps going. Worth mentioning to your vet |
+| 🔴 **Urgent attention needed** | A pattern that can be an emergency. Contact a vet now |
+
+**Fixed rules decide the message. AI is only used to explain it in plain words.** Purrcast never says "no vet needed", and it always tells owners to call a vet if they're worried.
+
+### When there's no problem, and when there is
+
+- **No alert:** the app shows what the cat is doing **live**, and what it did last.
+- **Alert:** the app switches to the alert screen first, with buttons to call your vet or find an emergency vet.
+- **"I've checked on my cat":** tells the app you've dealt with it, so it stops repeating the same alert. It comes back if things get worse or if the problem is still there a week later.
+
+### More than one cat?
+
+Each cat has its own profile and its own normal. For now we assume each scale belongs to one cat. In homes with several cats, the cat's weight on the litter box or bed could tell them apart (for example 4.2 kg vs 5.0 kg). Microchips or a camera are other options for later.
+
+## How we're different
+
+| Product | What it does |
+|---|---|
+| SureFeed Microchip Pet Feeder Connect | Feeding only |
+| Petivity Smart Litter Box Monitor | Litter box only |
+| **Purrcast** | Food, water, litter box **and** weight, together |
+
+1. **All four in one place.** A change in one habit means more when you can see the others (for example drinking more **and** peeing more **and** losing weight).
+2. **Compared with your cat, not an average cat.**
+3. **Nothing new for the cat.** The scales go under its usual bowls, box and bed.
+4. **Cheaper** than buying several separate smart devices (a goal we still need to confirm with real part prices).
+
+## How it's built
+
+```
+Scales (load cell + HX711 + ESP32)
+   │  weight readings
+   ▼
+sensors/   turns readings into events (a drink, a meal, a litter visit) and daily totals
+   ▼
+engine/    learns the normal range, compares each day, decides the message
+   ▼
+backend/   FastAPI server: sends the results to the app
+   ▼
+app        ui-concept/ (cartoon phone app) or mobile/ (Expo app)
+```
+
+| Part | Folder | Built with |
+|---|---|---|
+| Scale simulator (60 days of fake readings for 11 example cats) | `simulator/` | Python |
+| Reading → event → daily total | `sensors/` | Python, pandas, NumPy |
+| Health engine (normal range, comparisons, rules) | `engine/` | Python, NumPy, SciPy |
+| Server | `backend/` | Python, FastAPI |
+| Cartoon phone app (installable, works offline) | `ui-concept/` | HTML, CSS, JavaScript |
+| Expo app | `mobile/` | React Native (Expo), TypeScript |
+| Live hardware simulation | `hardware/wokwi/` | ESP32 (Arduino C++), Wokwi, MQTT |
+
+### The hardware
+
+Each scale is a **load cell** (a metal bar that bends a tiny bit under weight) connected to an **HX711** (a small board that turns that into a number). An **ESP32** (a small Wi-Fi computer) reads all four and sends the readings over Wi-Fi.
+
+- **Food and water:** one 5 kg load cell each.
+- **Litter box and bed:** four load cells each, one in every corner (like a bathroom scale), up to 50 kg.
+
+We built this in **Wokwi**, an online simulator, with the real parts and wiring. It sends live readings to the app through a public message server (MQTT). See [`hardware/wokwi/README.md`](hardware/wokwi/README.md).
+
+## What's real, and what's simulated
+
+| Part | Status |
+|---|---|
+| Health engine, sensors code, server, phone app | ✅ Working |
+| ESP32 + 4 scales | ✅ Working in the Wokwi simulator, with the same parts a real build would use |
+| 60 days of history | 🟡 Simulated. Public data with these raw scale readings doesn't exist, so our simulator creates realistic readings, including refills, spills and paws on the bowl |
+| Physical scales | ⏳ Next step: build them and calibrate with real weights |
+| Sending live readings to the engine every night | ⏳ Next step: the live demo saves each day on the phone. A real product would send it to the server, and the engine would check it every night |
+
+## What's next
+
+- Build the physical scales and calibrate them.
+- Send live readings to the server, and run the engine on them every night.
+- Warn the owner if the scales stop reporting for a long time.
+- Tell cats apart in homes with several cats.
+- Measure litter output more accurately.
+- A report you can send straight to your vet.
+- Advice for each cat's age, based on veterinary research.
+
+## Getting Started (run it on your laptop)
+
+This part is for developers. Team members: start with [`docs/SETUP.md`](docs/SETUP.md) → [`docs/CONTRACT.md`](docs/CONTRACT.md) → [`docs/PLAN.md`](docs/PLAN.md) → the `README.md` in your own folder.
 
 Everything below works on Windows (PowerShell) and Mac / Linux / WSL. Where the commands differ, both are shown.
 
@@ -313,7 +230,7 @@ Activate the environment again in **every new terminal** (`.venv\Scripts\Activat
 Run these from the repo root. The output folders are git-ignored, so **everyone runs this once** after cloning (and again after changing the simulator or sensors).
 
 ```bash
-# Fake scales: 4 cats x 60 days of raw readings
+# Fake scales: 11 example cats x 60 days of raw readings
 cd simulator
 python generate.py
 cd ..
@@ -373,7 +290,7 @@ cd ui-concept
 python -m http.server 5500
 ```
 
-Open [localhost:5500](http://localhost:5500). It finds the backend on port 8000 by itself. Flow: create account → add cat (photo, details) → pair scales → "Learning…" → **Demo: jump ahead to day 60**. Use the demo chips at the bottom to switch between the four cats, and **Start over** to reset.
+Open [localhost:5500](http://localhost:5500). It finds the backend on port 8000 by itself. Flow: create account → add cat (photo, details) → pair scales → "Learning…" → **Demo: jump ahead to day 60**. Switch between the 11 example cats in **Profile → Demo box**.
 
 **On a phone (same Wi-Fi):** find your laptop's IP (`ipconfig` on Windows, `ipconfig getifaddr en0` on Mac, `hostname -I` on Linux) and open `http://<that IP>:5500` on the phone. Campus Wi-Fi often blocks this; use your phone's hotspot instead.
 
