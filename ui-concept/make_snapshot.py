@@ -19,7 +19,7 @@ sys.path.insert(0, str(REPO))
 from engine import data  # noqa: E402
 import pandas as pd  # noqa: E402
 
-from engine.run import SCENES, _activity, assess, assess_rows, history, list_cats, now, recent  # noqa: E402
+from engine.run import SCENES, assess, latest_each, assess_rows, history, list_cats, now, recent  # noqa: E402
 
 cats = list_cats()
 info = {c["cat_id"]: c for c in data.load_cats()}
@@ -67,8 +67,7 @@ for c in cats:
     mine = events[(events["cat_id"] == cid) & events["type"].isin(SCENES)].sort_values("start") if events is not None else None
     per_day = []
     for date in rows["date"]:
-        upto = mine[mine["start"] < pd.Timestamp(date) + pd.Timedelta(days=1)] if mine is not None else []
-        per_day.append([_activity(e) for _, e in upto.tail(4).iloc[::-1].iterrows()] if len(upto) else [])
+        per_day.append(latest_each(mine, pd.Timestamp(date) + pd.Timedelta(days=1)) if mine is not None else [])
     recent_by_day[cid] = per_day
 snapshot["timeline"] = timeline
 snapshot["recent_by_day"] = recent_by_day
