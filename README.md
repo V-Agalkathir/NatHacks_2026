@@ -351,14 +351,18 @@ Stop anything with `Ctrl + C`.
 
 ## Team
 
-- [Name] — [Role or contribution]
-- [Name] — [Role or contribution]
-- [Name] — [Role or contribution]
-- [Name] — [Role or contribution]
+- Ben Tam — Data Simulation & Presentation
+- Faisal Hasen — Backend and Business
+- Audrey oni — UI Front End
+- Agal kathir Vijayakumara — Engine and Hardware
+- Wasi Abbas — Backend and Frontend
 
 ## References
 
 Cornell Feline Health Center. (2017, October 16). *Chronic kidney disease*. Cornell University College of Veterinary Medicine. [https://www.vet.cornell.edu/departments-centers-and-institutes/cornell-feline-health-center/health-information/feline-health-topics/chronic-kidney-disease](https://www.vet.cornell.edu/departments-centers-and-institutes/cornell-feline-health-center/health-information/feline-health-topics/chronic-kidney-disease)
+
+## Slide Deck
+https://www.canva.com/design/DAHaX07U28o/g6E19qp-4DcNh7_2fZlP1A/edit
 
 
 ## Acknowledgements
