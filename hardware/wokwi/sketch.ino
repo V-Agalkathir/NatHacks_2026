@@ -298,6 +298,9 @@ void connectWifi() {
   while (WiFi.status() != WL_CONNECTED && millis() - start < 10000) delay(100);
 }
 
+bool clockFake = false;      // on the fallback clock: switch to internet time as soon as it arrives
+uint32_t fakeSetMs = 0, lastClockTryMs = 0;
+
 // Internet time if available, otherwise the fixed demo start time
 void setClock() {
   if (WiFi.status() == WL_CONNECTED) {
@@ -308,6 +311,26 @@ void setClock() {
   if (time(nullptr) < 1700000000) {
     struct timeval tv = { START_EPOCH, 0 };
     settimeofday(&tv, nullptr);
+    clockFake = true;
+    fakeSetMs = millis();
+  }
+}
+
+// On the fallback clock: keep asking for internet time. When it arrives, move the
+// readings already kept for the app onto the real clock, so the app shows the right times
+void fixClock(uint32_t nowMs) {
+  if (!clockFake || WiFi.status() != WL_CONNECTED) return;
+  time_t expected = START_EPOCH + (nowMs - fakeSetMs) / 1000;
+  long delta = (long)(time(nullptr) - expected);
+  if (labs(delta) > 120) {                       // the clock jumped: internet time arrived
+    for (int k = 0; k < recentCount; k++) recent[(recentHead - recentCount + k + RECENT_N) % RECENT_N].t += delta;
+    clockFake = false;
+    recentDirty = true;
+    return;
+  }
+  if (nowMs - lastClockTryMs >= 15000) {         // ask again every 15 s
+    lastClockTryMs = nowMs;
+    configTime(0, 0, "pool.ntp.org", "time.google.com");
   }
 }
 
@@ -389,6 +412,7 @@ void setup() {
 void loop() {
   uint32_t now = millis();
   keepMqtt(now);
+  fixClock(now);
   publishRecent(now);
   if (sendAllNow && mqtt.connected()) {
     sendAllNow = false;
