@@ -48,6 +48,15 @@ def early_urgent(rows: pd.DataFrame) -> list[dict]:
     return []
 
 
+def many_visits_today(rows: pd.DataFrame) -> list[dict]:
+    """After day 14 too: 10+ litter visits in a day is urgent for any cat,
+    even if the litter output looks normal."""
+    visits = rows.iloc[-1].get("litter_visits")
+    if pd.notna(visits) and visits >= config.URGENT_VISITS_ANY_CAT:
+        return [_finding("many_visits_any_cat", "litter_visits", visits, config.TYPICAL_VISITS_MAX)]
+    return []
+
+
 def no_visits_today(rows: pd.DataFrame) -> list[dict]:
     """After day 14 too: a full day with zero litter visits is urgent for any cat."""
     last = rows.iloc[-1]

@@ -23,8 +23,10 @@ def litter_events(cat_id: str, times: pd.DatetimeIndex, grams: np.ndarray,
         rise = b.peak - b.before
 
         if rise >= cfg.cat_min_weight_g:
-            # Readings where the cat is clearly on the box
-            on = b.grams - b.before >= cfg.cat_min_weight_g * 0.5
+            # Readings where the cat is (at least partly) on the box. Relative to
+            # THIS cat's jump, so a light kitten stepping on/off (a third of its
+            # weight on the scale) still counts as "on", not as litter output.
+            on = b.grams - b.before >= 0.2 * rise
             on_times = b.times[on]
             length = (on_times[-1] - on_times[0]).total_seconds()
             # Ignore the half-stepping-in readings when estimating weight
