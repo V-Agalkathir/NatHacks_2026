@@ -199,7 +199,7 @@ Our pricing advantage remains a target to validate through hardware prototyping,
 
 ### Current Technology Stack
 
-- **Mobile application:** React Native (Expo), TypeScript
+- **Mobile application:** React Native (Expo), TypeScript; plus a cartoon web app concept (`ui-concept/`, HTML/CSS/JS, installable on phones)
 - **Backend:** Python, FastAPI
 - **Data processing:** pandas, NumPy, SciPy
 - **Sensor simulation:** Python
@@ -265,51 +265,171 @@ Potential areas of future development include:
 
 ## Demo
 
-- **Live demo:** [Add Expo link]
+- **App on your phone:** [v-agalkathir.github.io/NatHacks_2026/ui-concept](https://v-agalkathir.github.io/NatHacks_2026/ui-concept/) (open it, then **Add to Home Screen**)
 - **Video:** [Add demonstration link]
 
 ## Getting Started
 
-### Prerequisites
+Everything below works on Windows (PowerShell) and Mac / Linux / WSL. Where the commands differ, both are shown.
 
-- Node.js 18+
-- Python 3.10+
-- Expo Go (iOS or Android)
+### What you need
 
-### Installation
+- **Python 3.10+** ([python.org](https://www.python.org/downloads/); on Windows tick "Add Python to PATH")
+- **Git**
+- **Node.js 18+** and the **Expo Go** phone app, only if you run the Expo app in `mobile/`
+
+### 1. Get the code
 
 ```bash
-# Clone the repository
-git clone [repo-url]
-cd purrcast
+git clone https://github.com/V-Agalkathir/NatHacks_2026.git
+cd NatHacks_2026
+```
 
-# Backend environment
+### 2. Set up Python (once)
+
+One virtual environment at the repo root is shared by the simulator, sensors, engine and backend.
+
+**Windows (PowerShell)**
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
+
+**Mac / Linux / WSL**
+
+```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+```
 
-# Mobile application
+Activate the environment again in **every new terminal** (`.venv\Scripts\Activate.ps1` or `source .venv/bin/activate`). You'll see `(.venv)` at the start of the prompt.
+
+### 3. Generate the data
+
+Run these from the repo root. The output folders are git-ignored, so **everyone runs this once** after cloning (and again after changing the simulator or sensors).
+
+```bash
+# Fake scales: 4 cats x 60 days of raw readings
+cd simulator
+python generate.py
+cd ..
+
+# Raw readings -> events -> daily totals (sensors/output/daily.csv)
+python -m sensors.run
+
+# Optional: check the sensors against the simulator's answer key
+python -m sensors.test_accuracy
+```
+
+### 4. Check the engine
+
+```bash
+python -m engine.run           # one line per cat
+python -m engine.run luna      # full JSON for one cat
+python -m engine.test_engine   # stress test across many random cats
+```
+
+`python -m engine.run` should print `Data: ...sensors/output/daily.csv` and these levels:
+
+| Cat | Scenario | Expected |
+|---|---|---|
+| Mochi | healthy | `good` |
+| Luna | one odd day | `blip` |
+| Lena | slow drinking trend | `vet` |
+| Oscar | litter emergency | `urgent` |
+
+If it says `sample_data` instead, step 3 didn't run.
+
+### 5. Start the backend (Terminal 1)
+
+```bash
+cd backend
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Check it at [localhost:8000/cats](http://localhost:8000/cats). Interactive API docs are at [localhost:8000/docs](http://localhost:8000/docs).
+
+| Endpoint | Returns |
+|---|---|
+| `GET /health` | `{ "ok": true }` |
+| `GET /cats` | each cat's id, name and level |
+| `GET /cats/{id}/status` | level, message, tiles and details (`docs/CONTRACT.md` section 5) |
+| `GET /cats/{id}/now` | latest activity (drink, eat, litter, sleep) |
+| `GET /cats/{id}/history?days=30` | daily rows |
+| `GET /cats/{id}/vet-report` | report with the last 14 days |
+
+### 6. Start an app (Terminal 2)
+
+There are two front ends. Either works with the backend.
+
+#### Option A: the cartoon web app (`ui-concept/`)
+
+```bash
+cd ui-concept
+python -m http.server 5500
+```
+
+Open [localhost:5500](http://localhost:5500). It finds the backend on port 8000 by itself. Flow: create account → add cat (photo, details) → pair scales → "Learning…" → **Demo: jump ahead to day 60**. Use the demo chips at the bottom to switch between the four cats, and **Start over** to reset.
+
+**On a phone (same Wi-Fi):** find your laptop's IP (`ipconfig` on Windows, `ipconfig getifaddr en0` on Mac, `hostname -I` on Linux) and open `http://<that IP>:5500` on the phone. Campus Wi-Fi often blocks this; use your phone's hotspot instead.
+
+**As a standalone phone app (no laptop needed):**
+
+```bash
+python ui-concept/make_snapshot.py   # saves the engine's real results into the app
+```
+
+Commit and push `ui-concept/` to `main`, then open the link in **Demo** above and **Add to Home Screen**. It works offline. See [`ui-concept/README.md`](ui-concept/README.md) for details.
+
+#### Option B: the Expo app (`mobile/`)
+
+```bash
 cd mobile
 npm install
 ```
 
-### Running the Project
+Create `mobile/.env` from the example (`copy .env.example .env` on Windows, `cp .env.example .env` on Mac/Linux) and set:
+
+```
+EXPO_PUBLIC_API_URL=http://<your laptop IP>:8000
+EXPO_PUBLIC_USE_MOCK=false
+```
+
+Then:
 
 ```bash
-# 1. Generate simulated sensor readings
-python simulator/generate.py
-
-# 2. Process the simulated readings
-python -m sensors.run
-
-# 3. Start the backend
-cd backend
-uvicorn main:app --reload
-
-# 4. Start the mobile application
-cd ../mobile
-npx expo start
+npx expo start            # same Wi-Fi as your phone
+npx expo start --tunnel   # if the phone can't connect (campus Wi-Fi, WSL)
 ```
+
+Scan the QR code with Expo Go. See [`mobile/README.md`](mobile/README.md).
+
+### All commands at a glance
+
+| Terminal | Folder | Command |
+|---|---|---|
+| once | repo root | `cd simulator; python generate.py; cd ..` then `python -m sensors.run` |
+| 1 | `backend/` | `uvicorn main:app --reload --host 0.0.0.0 --port 8000` |
+| 2 | `ui-concept/` | `python -m http.server 5500` |
+| 2 (alt) | `mobile/` | `npx expo start` |
+
+Stop anything with `Ctrl + C`.
+
+### Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| `python` not found (Windows) | Use `py` instead of `python`, or reinstall Python with "Add to PATH" ticked |
+| `Activate.ps1 cannot be loaded` | Run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once, then activate again |
+| `uvicorn` not recognized | Activate `.venv` first, or run `python -m uvicorn main:app --reload --port 8000` |
+| `No data file found` / engine uses `sample_data` | Run step 3 from the repo root |
+| Every cat shows the same level | Regenerate: step 3, then restart the backend |
+| Port already in use | Stop the old terminal, or change `--port 8000` / `5500` |
+| Phone can't open the app | Same Wi-Fi as the laptop, backend started with `--host 0.0.0.0`, allow Python through the firewall, or use a hotspot |
+| Git warns `LF will be replaced by CRLF` | Harmless on Windows. Files that show as modified with no real change can be reset with `git restore <folder>` |
 
 ## Team
 
