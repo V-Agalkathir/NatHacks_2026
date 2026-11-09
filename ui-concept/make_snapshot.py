@@ -17,7 +17,9 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
 from engine import data  # noqa: E402
-from engine.run import assess, assess_rows, history, list_cats, now, recent  # noqa: E402
+import pandas as pd  # noqa: E402
+
+from engine.run import SCENES, assess, latest_each, assess_rows, history, list_cats, now, recent  # noqa: E402
 
 cats = list_cats()
 info = {c["cat_id"]: c for c in data.load_cats()}
@@ -36,25 +38,49 @@ snapshot = {
     "history": {c["cat_id"]: history(c["cat_id"], 90) for c in cats},
 }
 
-# Days 1-14 (still learning): urgent checks still run, so save each day's result.
-# early[cat][d - 1] = status the app shows on learning day d.
+# Every day's result, so the demo can step through days 1-60 and show when
+# each message first appears. Identical results are stored once:
+#   timeline["statuses"] = [status, ...]
+#   timeline["days"][cat][age_group] = [index into statuses for day 1, day 2, ...]
+#   recent_by_day[cat][d - 1] = the last few activities at the end of day d
 daily = data.load_daily()
-snapshot["early"] = {}
+events = data.load_events()
+statuses, seen = [], {}
+KEEP = ("level", "message", "tiles", "details", "age_group", "learning")
+timeline = {"statuses": statuses, "days": {}}
+recent_by_day = {}
 for c in cats:
-    rows = data.cat_rows(daily, c["cat_id"])
-    snapshot["early"][c["cat_id"]] = [
-        {k: v for k, v in assess_rows(rows.head(d), info[c["cat_id"]]).items() if k in ("level", "message", "details")}
-        for d in range(1, 15)
-    ]
+    cid = c["cat_id"]
+    rows = data.cat_rows(daily, cid)
+    timeline["days"][cid] = {}
+    for group, age_years in AGE_GROUPS.items():
+        idx = []
+        for d in range(1, len(rows) + 1):
+            st = assess_rows(rows.head(d), {**info[cid], "age": age_years})
+            st = {k: st[k] for k in KEEP if k in st}
+            key = json.dumps(st, sort_keys=True)
+            if key not in seen:
+                seen[key] = len(statuses)
+                statuses.append(st)
+            idx.append(seen[key])
+        timeline["days"][cid][group] = idx
+    mine = events[(events["cat_id"] == cid) & events["type"].isin(SCENES)].sort_values("start") if events is not None else None
+    per_day = []
+    for date in rows["date"]:
+        per_day.append(latest_each(mine, pd.Timestamp(date) + pd.Timedelta(days=1)) if mine is not None else [])
+    recent_by_day[cid] = per_day
+snapshot["timeline"] = timeline
+snapshot["recent_by_day"] = recent_by_day
 
 out = Path(__file__).resolve().parent / "snapshot.js"
 out.write_text(
     "// Made by make_snapshot.py from the engine's real output. Don't edit by hand.\n"
-    f"window.PURRCAST_SNAPSHOT = {json.dumps(snapshot, indent=1, default=str)};\n",
+    f"window.PURRCAST_SNAPSHOT = {json.dumps(snapshot, separators=(',', ':'), default=str)};\n",
     encoding="utf-8",
 )
 print(f"Wrote {out.name} from {snapshot['source']}:")
 for c in snapshot["cats"]:
     lv = {g: snapshot["status"][c["cat_id"]][g]["level"] for g in AGE_GROUPS}
-    urgent_days = [i + 1 for i, e in enumerate(snapshot["early"][c["cat_id"]]) if e["level"] == "urgent"]
-    print(f"  {c['cat_id']:<8} {c['scenario']:<17} learning urgent days={urgent_days} kitten={lv['kitten']:<7} adult={lv['adult']:<7} senior={lv['senior']}")
+    days = [statuses[i]["level"] for i in timeline["days"][c["cat_id"]]["adult"]]
+    first = next((f"{lv} from day {d + 1}" for d, lv in enumerate(days) if lv != "good"), "green all 60 days")
+    print(f"  {c['cat_id']:<8} {c['scenario']:<17} (adult) first change: {first:<22} kitten={lv['kitten']:<7} adult={lv['adult']:<7} senior={lv['senior']}")

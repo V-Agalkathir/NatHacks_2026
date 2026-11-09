@@ -58,9 +58,18 @@ def assess_rows(rows: pd.DataFrame, cat: dict) -> dict:
         return result
 
     # 1. normal  2. z-scores  3. trends  4. rules decide  5. explain
-    z_recent = anomaly.recent(rows, base, n=2)
-    trend_info = trends.compute(rows, base)
-    level, findings = rules.decide(rows, base, z_recent, trend_info, prof)
+    level, findings = _judge(rows, base, prof)
+
+    # Keep yellow steady: if the last 2 days were "worth a vet visit", a quieter
+    # day doesn't flip back to green (owners would see yellow-green-yellow).
+    if level in ("good", "blip") and len(rows) > config.BASELINE_DAYS + 1:
+        for back in (1, 2):
+            if len(rows) - back <= config.BASELINE_DAYS:
+                break
+            prev_level, prev_findings = _judge(rows.iloc[:-back], base, prof)
+            if prev_level == "vet":
+                level, findings = prev_level, prev_findings
+                break
 
     details = explain.build_details(level, findings, cat)
     details["age_note"] = age.note(prof, cat)
@@ -72,6 +81,13 @@ def assess_rows(rows: pd.DataFrame, cat: dict) -> dict:
         "details": details,
     })
     return explain.polish(result)
+
+
+def _judge(rows: pd.DataFrame, base: dict, prof: dict):
+    """Rules for the last day of `rows`: (level, findings)."""
+    z_recent = anomaly.recent(rows, base, n=2)
+    trend_info = trends.compute(rows, base)
+    return rules.decide(rows, base, z_recent, trend_info, prof)
 
 
 def _find_cat(cat_id: str) -> dict:
@@ -140,21 +156,46 @@ def now(cat_id: str) -> dict:
     return result
 
 
-def _activity(e) -> dict:
-    """One sensor event -> {scene, type, time, text} for the app."""
+LABELS = {"drink": "Last drink", "eat": "Last meal", "litter_visit": "Last litter visit", "bed_session": "Last nap"}
+
+
+def _activity(e, until=None) -> dict:
+    """One sensor event -> {scene, type, time, text, label, short} for the app.
+
+    until: the moment we're looking from. A nap still going at that moment is
+    shown as "since 9:00 PM", without a length (the length isn't known yet).
+    """
     clock = e["start"].strftime("%I:%M %p").lstrip("0")
     amount = e.get("amount_g")
     if e["type"] == "drink":
-        text = f"Drank {amount:.0f} ml at {clock}"
+        short = f"{amount:.0f} ml at {clock}"
+        text = f"Drank {short}"
     elif e["type"] == "eat":
-        text = f"Ate {amount:.0f} g at {clock}"
+        short = f"{amount:.0f} g at {clock}"
+        text = f"Ate {short}"
     elif e["type"] == "litter_visit":
-        text = f"Used the litter box at {clock}"
+        short = f"at {clock}"
+        text = f"Used the litter box {short}"
     else:
-        minutes = int((e["end"] - e["start"]).total_seconds() // 60)
-        text = f"Napping on the bed since {clock} ({minutes // 60} h {minutes % 60} min)"
-    return {"scene": SCENES[e["type"]], "type": e["type"],
-            "time": e["start"].strftime("%Y-%m-%dT%H:%M:%S"), "text": text}
+        end = e["end"]
+        if until is not None and end > until:
+            short = f"since {clock}"
+            text = f"Napping on the bed {short}"
+        else:
+            minutes = int((end - e["start"]).total_seconds() // 60)
+            short = f"from {clock} ({minutes // 60} h {minutes % 60} min)"
+            text = f"Napped on the bed {short}"
+    return {"scene": SCENES[e["type"]], "type": e["type"], "label": LABELS[e["type"]],
+            "time": e["start"].strftime("%Y-%m-%dT%H:%M:%S"), "text": text, "short": short}
+
+
+def latest_each(events: pd.DataFrame, until=None) -> list[dict]:
+    """The latest drink, meal, litter visit and nap (one of each), newest first."""
+    if until is not None:
+        events = events[events["start"] < until]
+    picks = [g.sort_values("start").iloc[-1] for _, g in events.groupby("type")]
+    picks.sort(key=lambda e: e["start"], reverse=True)
+    return [_activity(e, until) for e in picks]
 
 
 def recent(cat_id: str, n: int = 5) -> list[dict]:
@@ -165,7 +206,7 @@ def recent(cat_id: str, n: int = 5) -> list[dict]:
     if events is None:
         return []
     mine = events[(events["cat_id"] == cat_id) & events["type"].isin(SCENES)]
-    return [_activity(e) for _, e in mine.sort_values("start").tail(n).iloc[::-1].iterrows()]
+    return latest_each(mine)[:n]
 
 
 if __name__ == "__main__":
