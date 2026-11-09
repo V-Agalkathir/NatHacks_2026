@@ -314,6 +314,7 @@ void setup() {
   snprintf(topicReadings, sizeof(topicReadings), "purrcast/%s/readings", PAIR_CODE);
   snprintf(topicStatus, sizeof(topicStatus), "purrcast/%s/status", PAIR_CODE);
   mqtt.setServer(MQTT_HOST, MQTT_PORT);
+  mqtt.setKeepAlive(5);   // the broker notices within ~8 s if the simulation stops, and tells the app "offline"
   keepMqtt(millis());
 
   for (int i = 0; i < SCALE_COUNT; i++) {
