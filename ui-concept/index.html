@@ -320,6 +320,8 @@ body.has-tabs .tabbar { display: grid; }
 .daybar input[type=range] { width: 100%; accent-color: var(--nose); }
 
 .followup { display: flex; flex-direction: column; gap: 8px; }
+.checked { display: inline-block; align-self: flex-start; margin-top: 6px; font-size: 15px; font-weight: 600;
+  background: var(--green-soft); border: 2px solid var(--ink); border-radius: 999px; padding: 3px 12px; }
 .note-list .dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; border: 2px solid var(--ink); margin-right: 6px; vertical-align: -1px; }
 
 /* ===================== Owner notes ===================== */
@@ -1133,14 +1135,14 @@ function notesCard(cat) {
     <h3>Noticed anything yourself?</h3>
     <textarea class="input" id="note-text" maxlength="400" placeholder="e.g. Threw up after breakfast" aria-label="Your note about ${esc(cat.name)}"></textarea>
     <button class="btn small" id="note-save" style="align-self:flex-start">Save note</button>
-    ${last ? `<p class="small-print">Last note, ${fmtDate(last.date)}: ${esc(noteText(last))}. All notes are on the Dashboard.</p>` : ""}
+    ${last ? `<p class="small-print">Last note, ${last.day ? `day ${last.day}` : fmtDate(last.date)}: ${esc(noteText(last))}. All notes are on the Dashboard.</p>` : ""}
   </div>`;
 }
 function wireNotes(cat, after) {
   $("note-save").addEventListener("click", () => {
     const text = $("note-text").value.trim();
     if (!text) { toast("Write a note first"); return; }
-    cat.notes = [{ id: newId(), date: new Date().toISOString(), tags: noteTags, text }, ...(cat.notes || [])];
+    cat.notes = [{ id: newId(), date: new Date().toISOString(), day: cat.day, tags: noteTags, text }, ...(cat.notes || [])];
     noteTags = []; save(); toast("Note saved to the Dashboard");
     after();
   });
@@ -1149,7 +1151,7 @@ function notesList(cat) {
   const notes = cat.notes || [];
   return `<div class="card"><h3>Your notes</h3>
     ${notes.length ? `<ul class="note-list">${notes.map(n => `<li><div class="n-body">
-        <p class="n-date">${fmtDate(n.date)}</p>
+        <p class="n-date">${n.day ? `Day ${n.day} · ` : ""}${fmtDate(n.date)}</p>
         ${n.tags.length ? `<p class="n-tags">${esc(n.tags.join(", "))}</p>` : ""}${n.text ? `<p>${esc(n.text)}</p>` : ""}</div>
         <button class="link-btn" data-del-note="${n.id}" aria-label="Delete note from ${fmtDate(n.date)}">Delete</button></li>`).join("")}</ul>`
       : `<p class="soft">No notes yet. Add one on the Home tab when you notice something.</p>`}</div>`;
@@ -1180,7 +1182,13 @@ function episodes(d) {
 const responsesIn = (cat, ep, d) => (cat.responses || []).filter(r => r.day >= ep.start && r.day <= Math.min(ep.end, d.day));
 const daysText = ep => ep.start === ep.end ? `day ${ep.start}` : `days ${ep.start}–${ep.end}`;
 function responseLine(cat, r) { return `You checked on ${cat.name} on day ${r.day}.`; }
-const QUIET_DAYS = 7;   // after "I've checked on her", stay quiet this long, then remind if it's still going
+const QUIET_DAYS = 7;
+function checkedSummary(rs) {
+  const days = [...new Set(rs.map(r => r.day))].sort((a, b) => a - b);
+  if (!days.length) return "";
+  const list = days.length === 1 ? `${days[0]}` : `${days.slice(0, -1).join(", ")} and ${days[days.length - 1]}`;
+  return `Checked on day${days.length > 1 ? "s" : ""} ${list}`;
+}   // after "I've checked on her", stay quiet this long, then remind if it's still going
 
 // The big status card, or a calmer "you've already acted" version of it
 function statusCard(cat, d) {
@@ -1232,11 +1240,12 @@ function followUpCard(cat, d) {
   const col = ep.rank === 2 ? STATUS.red : STATUS.yellow;
   const msg = personalise(ep.status.message, cat, { ...d, day: ep.start });
   const what = ep.rank === 2 ? msg.split(" This pattern")[0] : noticed(msg, cat);
-  const said = responsesIn(cat, ep, d).map(r => responseLine(cat, r)).join(" ");
+  const said = checkedSummary(responsesIn(cat, ep, d));
   return `<div class="card followup">
     <span class="pill" style="--c:${col.color}">Follow-up</span>
     <h3>${esc(cat.name)}'s patterns ${learning(cat) ? "look normal again" : "are back within the usual range"}.</h3>
-    <p>On ${daysText(ep)} we noticed: ${esc(what)}${said ? " " + esc(said) : ""}</p>
+    <p>On ${daysText(ep)} we noticed: ${esc(what)}</p>
+    ${said ? `<p class="checked">✓ ${esc(said)}</p>` : ""}
   </div>`;
 }
 
@@ -1255,10 +1264,10 @@ function alertHistory(cat, d) {
     ${eps.length ? `<ul class="note-list">${eps.slice().reverse().map(ep => {
       const col = ep.rank === 2 ? STATUS.red : STATUS.yellow;
       const msg = personalise(ep.status.message, cat, { ...d, day: ep.start });
-      const said = responsesIn(cat, ep, d).map(r => responseLine(cat, r)).join(" ");
+      const said = checkedSummary(responsesIn(cat, ep, d));
       return `<li><div class="n-body"><p class="n-date"><i class="dot" style="background:${col.color}"></i>${daysText(ep)}${ep.end === d.day ? " · still going" : ""}</p>
         <p class="n-tags">${col.pill}</p><p>${esc(ep.rank === 2 ? msg.split(" This pattern")[0] : noticed(msg, cat))}</p>
-        ${said ? `<p class="soft">${esc(said)}</p>` : ""}</div></li>`;
+        ${said ? `<p class="checked">✓ ${esc(said)}</p>` : ""}</div></li>`;
     }).join("")}</ul>` : `<p class="soft">No alerts up to day ${d.day}.</p>`}</div>`;
 }
 
@@ -1494,7 +1503,7 @@ async function renderProfile() {
       <p>Demo: simulated data for ${esc(cur.name)}</p>
       <div class="chips" id="p-sims">${sims.map(s => `<button class="chip" aria-pressed="${s.cat_id === sim.cat_id}" data-link="${s.cat_id}">${esc(simLabel(s))}</button>`).join("")}</div>
       <p>Demo: ${esc(cur.name)} is on day ${cur.day}</p>
-      <div class="chips"><button class="chip" id="p-day1">Back to day 1 (learning)</button><button class="chip" id="p-day60">Jump to day 60</button></div>
+      <div class="chips"><button class="chip" id="p-day1">Back to day 1 (learning)</button><button class="chip" id="p-day60">Jump to day 60</button><button class="chip" id="p-clear-checks">Clear check-ins (${(cur.responses || []).length})</button></div>
       <p>Demo: preview the "did last" animation</p>
       <div class="chips" id="p-anim">${["drink", "eat", "litter", "sleep"].map(k =>
         `<button class="chip" aria-pressed="${k === preview}" data-act="${k}">${{ drink: "Drinking", eat: "Eating", litter: "Litter", sleep: "Napping" }[k]}</button>`).join("")}</div>
@@ -1526,6 +1535,8 @@ async function renderProfile() {
     cur.linkId = b.dataset.link; save(); renderProfile(); toast(`${cur.name} now uses ${simOf(cur).name}'s data`);
   });
   $("p-day1").addEventListener("click", () => { cur.day = 1; save(); renderProfile(); toast(`${cur.name} is back to day 1`); });
+  // Testing: forget every "I've checked on ..." so alerts show in full again
+  $("p-clear-checks").addEventListener("click", () => { cur.responses = []; save(); renderProfile(); toast(`Check-ins cleared for ${cur.name}`); });
   $("p-day60").addEventListener("click", () => { cur.day = 60; save(); renderProfile(); toast(`${cur.name} jumped to day 60`); });
   $("p-anim").addEventListener("click", e => {
     const b = e.target.closest("[data-act]"); if (!b) return;
