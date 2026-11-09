@@ -32,10 +32,11 @@ def assess_rows(rows: pd.DataFrame, cat: dict) -> dict:
     if len(rows) <= config.BASELINE_DAYS or not base:
         result.update({
             "level": "good",
-            "message": f"Still learning {name}'s normal ({len(rows)} of {config.BASELINE_DAYS} days).",
+            "message": (f"Learning {name}'s usual patterns ({len(rows)} of {config.BASELINE_DAYS} days). "
+                        f"If you notice any symptoms, contact your vet."),
             "tiles": [{"key": k, "label": f"{k.capitalize()} learning", "ok": True}
                       for k in explain.TILE_GROUPS],
-            "details": {"changed": "Not enough data yet to compare against.",
+            "details": {"changed": "Not enough days yet to know what's usual for this cat.",
                         "maybe_nothing": "",
                         "call_if": explain.build_details("good", [], cat)["call_if"]},
         })
@@ -89,6 +90,43 @@ def history(cat_id: str, days: int = 30) -> list[dict]:
     rows["date"] = rows["date"].dt.strftime("%Y-%m-%d")
     rows = rows.astype(object).where(rows.notna(), None)
     return rows.to_dict(orient="records")
+
+
+# Sensor event type -> mascot scene in the app
+SCENES = {"drink": "drink", "eat": "eat", "litter_visit": "litter", "bed_session": "sleep"}
+
+
+def now(cat_id: str) -> dict:
+    """The cat's most recent activity, for the app's animated mascot (GET /cats/{id}/now).
+
+    Returns {cat_id, scene, type, time, text}. scene is drink / eat / litter / sleep,
+    or idle when there are no events yet.
+    """
+    _find_cat(cat_id)
+    events = data.load_events()
+    result = {"cat_id": cat_id, "scene": "idle", "type": None, "time": None,
+              "text": "No activity recorded yet"}
+    if events is None:
+        return result
+    mine = events[(events["cat_id"] == cat_id) & events["type"].isin(SCENES)]
+    if mine.empty:
+        return result
+
+    e = mine.sort_values("start").iloc[-1]
+    clock = e["start"].strftime("%I:%M %p").lstrip("0")
+    amount = e.get("amount_g")
+    if e["type"] == "drink":
+        text = f"Drank {amount:.0f} ml at {clock}"
+    elif e["type"] == "eat":
+        text = f"Ate {amount:.0f} g at {clock}"
+    elif e["type"] == "litter_visit":
+        text = f"Used the litter box at {clock}"
+    else:
+        minutes = int((e["end"] - e["start"]).total_seconds() // 60)
+        text = f"Napping on the bed since {clock} ({minutes // 60} h {minutes % 60} min)"
+    result.update(scene=SCENES[e["type"]], type=e["type"],
+                  time=e["start"].strftime("%Y-%m-%dT%H:%M:%S"), text=text)
+    return result
 
 
 if __name__ == "__main__":

@@ -24,10 +24,47 @@ def data_source() -> Path:
     return _first_existing(config.DATA_FALLBACKS)
 
 
+def _drop_incomplete_last_day(df: pd.DataFrame) -> pd.DataFrame:
+    """Remove the newest date if it's only a partial day.
+
+    The night's bed session can run past midnight, so sensors sometimes write
+    one extra day with no food, water or litter yet. Scoring it would look like
+    every cat suddenly stopped eating and drinking.
+    """
+    if df.empty:
+        return df
+    last = df["date"].max()
+    intake = df.loc[df["date"] == last, ["water_ml", "food_g", "litter_visits"]]
+    if (intake.fillna(0).sum(axis=1) == 0).all():
+        return df[df["date"] < last]
+    return df
+
+
+def _blank_unreliable_days(df: pd.DataFrame) -> pd.DataFrame:
+    """Days the sensors flagged data_ok=False (e.g. a knocked-over bowl) become
+    missing values, so they're skipped instead of read as real numbers."""
+    if "data_ok" not in df.columns:
+        return df
+    ok = df["data_ok"].astype(str).str.lower().isin(["true", "1", "yes"])
+    metrics = [m for m in config.METRICS if m in df.columns]
+    df.loc[~ok, metrics] = float("nan")
+    return df
+
+
 def load_daily() -> pd.DataFrame:
-    """All cats' daily rows, sorted by cat and date."""
+    """All cats' daily rows, cleaned and sorted by cat and date."""
     df = pd.read_csv(data_source(), parse_dates=["date"])
+    df = _drop_incomplete_last_day(df)
+    df = _blank_unreliable_days(df)
     return df.sort_values(["cat_id", "date"]).reset_index(drop=True)
+
+
+def load_events() -> pd.DataFrame | None:
+    """Individual events (sensors output), or None if none exist yet."""
+    for p in config.EVENTS_FALLBACKS:
+        if p.exists():
+            return pd.read_csv(p, parse_dates=["start", "end"])
+    return None
 
 
 def load_cats() -> list[dict]:

@@ -1,0 +1,934 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Purrcast</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ===================== Design tokens ===================== */
+:root {
+  --bowl: #E3F2EF;      /* page background: pale mint, like a water bowl */
+  --paper: #FFFFFF;     /* cards and stickers */
+  --ink: #2E2140;       /* outlines and text: deep plum */
+  --ink-soft: #6B5C80;  /* secondary text */
+  --nose: #FF8FAB;      /* primary buttons: cat-nose pink */
+  --butter: #FFD66B;    /* highlights */
+
+  /* status colours (docs/CONTRACT.md section 4) */
+  --good: #7FD8A4;
+  --blip: #8EC9FF;
+  --vet: #FFC94D;
+  --urgent: #FF6B5E;
+
+  /* the mascot's coat: set from the owner's photo (see setCoat) */
+  --fur: #F2A65A;
+  --fur-dark: #D9823A;
+  --fur-light: #FBDDB5;
+  --eye: #2E2140;
+
+  --line: 3px;
+  --pop: 4px 4px 0 var(--ink);
+  --pop-sm: 3px 3px 0 var(--ink);
+  --font: "Fredoka", "Trebuchet MS", sans-serif;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bowl);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 17px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  background-image: radial-gradient(rgba(46,33,64,.07) 2px, transparent 2.5px);
+  background-size: 26px 26px;
+}
+.app { max-width: 420px; min-height: 100dvh; margin: 0 auto; padding: 20px 16px 32px; display: flex; flex-direction: column; }
+.screen { display: none; flex: 1; flex-direction: column; gap: 20px; }
+.screen.active { display: flex; }
+
+h1, h2, h3, p { margin: 0; }
+h1 { font-size: 52px; font-weight: 700; line-height: 1.05; letter-spacing: -.5px; }
+h2 { font-size: 28px; font-weight: 600; line-height: 1.15; }
+.lead { color: var(--ink-soft); font-size: 18px; }
+.soft { color: var(--ink-soft); }
+
+/* ===================== Buttons & inputs ===================== */
+.btn {
+  appearance: none; font: 600 19px/1 var(--font); color: var(--ink);
+  background: var(--nose); border: var(--line) solid var(--ink); border-radius: 999px;
+  padding: 16px 24px; box-shadow: var(--pop); cursor: pointer; width: 100%;
+  transition: transform .08s, box-shadow .08s;
+}
+.btn:active { transform: translate(3px, 3px); box-shadow: 1px 1px 0 var(--ink); }
+.btn:disabled { background: #EEE8F2; color: var(--ink-soft); cursor: not-allowed; }
+.btn.quiet { background: var(--paper); }
+.btn.small { font-size: 16px; padding: 10px 16px; width: auto; box-shadow: var(--pop-sm); }
+.row { display: flex; gap: 12px; }
+.row > .btn { flex: 1; }
+.link-btn {
+  appearance: none; background: none; border: 0; padding: 8px;
+  font: 500 16px var(--font); color: var(--ink-soft);
+  text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+}
+.back { align-self: flex-start; margin-left: -8px; }
+:focus-visible { outline: 3px dashed var(--ink); outline-offset: 4px; }
+
+label.field, .field { display: flex; flex-direction: column; gap: 6px; font-weight: 500; }
+.field .hint { font-weight: 400; color: var(--ink-soft); font-size: 15px; }
+.input {
+  font: 500 19px var(--font); color: var(--ink); background: var(--paper);
+  border: var(--line) solid var(--ink); border-radius: 18px; padding: 13px 16px;
+  box-shadow: var(--pop-sm); width: 100%;
+}
+.input::placeholder { color: #B3A8C2; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+.toggle { display: flex; gap: 10px; }
+.toggle input { position: absolute; opacity: 0; pointer-events: none; }
+.toggle label {
+  flex: 1; text-align: center; cursor: pointer; font-weight: 600; padding: 11px 0;
+  background: var(--paper); border: var(--line) solid var(--ink); border-radius: 14px; box-shadow: var(--pop-sm);
+}
+.toggle input:checked + label { background: var(--butter); }
+.toggle input:focus-visible + label { outline: 3px dashed var(--ink); outline-offset: 3px; }
+
+.stepper { display: flex; align-items: center; gap: 10px; }
+.stepper button {
+  width: 44px; height: 44px; border-radius: 50%; flex: none;
+  font: 700 22px/1 var(--font); color: var(--ink);
+  background: var(--paper); border: var(--line) solid var(--ink); box-shadow: var(--pop-sm); cursor: pointer;
+}
+.stepper output { font-size: 20px; font-weight: 600; flex: 1; text-align: center; }
+
+/* coat colour swatches */
+.swatches { display: flex; gap: 10px; flex-wrap: wrap; }
+.swatch {
+  width: 40px; height: 40px; border-radius: 50%; cursor: pointer;
+  border: var(--line) solid var(--ink); background: var(--c); box-shadow: var(--pop-sm);
+}
+.swatch[aria-pressed="true"] { outline: 3px solid var(--ink); outline-offset: 3px; }
+
+/* ===================== Cat sticker (photo with cartoon ears) ===================== */
+.sticker { --ring: var(--paper); position: relative; width: 200px; margin: 34px auto 0; aspect-ratio: 1; }
+.sticker .ears { position: absolute; inset: -34px 0 auto 0; width: 100%; }
+/* fill/stroke are inherited into the shared #ears symbol */
+.sticker .ears { fill: var(--ring); stroke: var(--ink); stroke-width: 6; stroke-linejoin: round; }
+.sticker .face {
+  position: relative; width: 100%; height: 100%; border-radius: 50%;
+  border: var(--line) solid var(--ink); background: var(--ring); padding: 10px; box-shadow: var(--pop);
+}
+.sticker .face > * {
+  width: 100%; height: 100%; border-radius: 50%; border: var(--line) solid var(--ink);
+  object-fit: cover; background: var(--paper); display: block;
+}
+.sticker.small { width: 140px; margin-top: 26px; }
+.sticker.small .ears { inset: -24px 0 auto 0; }
+.upload { cursor: pointer; display: block; }
+.upload input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.upload:focus-within .face { outline: 3px dashed var(--ink); outline-offset: 6px; }
+.upload-hint {
+  position: absolute; right: -6px; bottom: 6px; background: var(--butter);
+  border: var(--line) solid var(--ink); border-radius: 999px; padding: 6px 12px;
+  font-weight: 600; font-size: 15px; box-shadow: var(--pop-sm);
+}
+
+/* coat-coloured cartoon parts (used by both the face and the mascot) */
+.fur { fill: var(--fur); }
+.fur-light { fill: var(--fur-light); }
+.fur-dark { stroke: var(--fur-dark); }
+.eye { fill: var(--eye); }
+
+/* ===================== Welcome ===================== */
+#welcome { justify-content: center; text-align: center; gap: 26px; }
+#welcome .sticker { width: 220px; }
+
+/* ===================== Pairing ===================== */
+.sensors { display: flex; flex-direction: column; gap: 12px; }
+.sensor {
+  display: flex; align-items: center; gap: 12px; background: var(--paper);
+  border: var(--line) solid var(--ink); border-radius: 20px; padding: 10px 12px; box-shadow: var(--pop-sm);
+}
+.sensor svg { width: 40px; height: 40px; flex: none; }
+.sensor .s-name { flex: 1; font-weight: 600; line-height: 1.2; }
+.sensor .s-name span { display: block; font-weight: 400; color: var(--ink-soft); font-size: 15px; }
+.sensor.paired { background: #F1FBF5; }
+.sensor .btn.small:disabled { background: var(--good); color: var(--ink); cursor: default; }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip {
+  font: 600 15px var(--font); color: var(--ink); border: 2.5px solid var(--ink);
+  border-radius: 999px; padding: 6px 12px; cursor: pointer; background: var(--paper);
+}
+.chip[aria-pressed="true"] { background: var(--c, var(--butter)); }
+.demo-note { background: rgba(255,255,255,.6); border: 2.5px dashed var(--ink-soft); border-radius: 18px; padding: 12px 14px; }
+.demo-note p { font-size: 15px; color: var(--ink-soft); margin-bottom: 8px; }
+
+/* ===================== Learning ===================== */
+#learning { text-align: center; justify-content: center; }
+.progress { height: 18px; border: var(--line) solid var(--ink); border-radius: 999px; background: var(--paper); overflow: hidden; }
+.progress div { height: 100%; width: 7%; background: var(--butter); border-right: var(--line) solid var(--ink); }
+
+/* ===================== Home ===================== */
+.topbar { display: flex; justify-content: space-between; align-items: center; }
+.brand { font-weight: 700; font-size: 22px; }
+.who { text-align: center; }
+.who .name { font-size: 30px; font-weight: 700; margin-top: 12px; }
+
+.bubble {
+  position: relative; background: var(--paper); border: var(--line) solid var(--ink);
+  border-radius: 26px; padding: 18px 20px; font-size: 19px; font-weight: 500; box-shadow: var(--pop);
+}
+.bubble::before, .bubble::after { content: ""; position: absolute; left: 50%; border: 14px solid transparent; transform: translateX(-50%); }
+.bubble::before { top: -31px; border-bottom: 17px solid var(--ink); }
+.bubble::after  { top: -23px; border-bottom: 15px solid var(--paper); }
+.bubble .level {
+  display: inline-block; margin-bottom: 8px; font-size: 15px; font-weight: 600;
+  padding: 3px 12px; border-radius: 999px; border: 2.5px solid var(--ink); background: var(--ring, var(--good));
+}
+
+.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.tile {
+  background: var(--paper); border: var(--line) solid var(--ink); border-radius: 20px;
+  padding: 10px 4px 8px; text-align: center; font-size: 14px; font-weight: 600; box-shadow: var(--pop-sm);
+}
+.tile svg { width: 34px; height: 34px; display: block; margin: 0 auto 4px; }
+.tile .word { color: var(--ink-soft); font-weight: 500; }
+.tile.changed { background: var(--ring); }
+.tile.changed .word { color: var(--ink); }
+
+/* "Right now" mascot card */
+.now {
+  display: flex; align-items: center; gap: 14px; background: var(--paper);
+  border: var(--line) solid var(--ink); border-radius: 26px; padding: 10px 16px 10px 10px; box-shadow: var(--pop-sm);
+}
+.now .stage { flex: none; width: 116px; height: 94px; background: var(--bowl); border-radius: 18px; border: 2.5px solid var(--ink); overflow: hidden; }
+.now .stage svg { width: 100%; height: 100%; display: block; }
+.now .what { font-weight: 600; font-size: 18px; line-height: 1.25; }
+.now .when { color: var(--ink-soft); font-size: 15px; margin-top: 2px; }
+
+.demo { margin-top: 8px; display: flex; flex-direction: column; gap: 12px; }
+
+/* ===================== Mascot animation ===================== */
+.m-outline { stroke: var(--ink); stroke-width: 4; stroke-linejoin: round; stroke-linecap: round; }
+.mascot .tail, .mascot .head, .mascot .body-g, .mascot .tongue,
+.mascot .zz text, .mascot .ripple, .mascot .bits > * { transform-box: fill-box; }
+.mascot .tail { transform-origin: 0% 100%; animation: sway 2.2s ease-in-out infinite; }
+.mascot .head { transform-origin: 50% 100%; transition: transform .35s; }
+.mascot .eyes-closed, .mascot .tongue, .mascot .bowl, .mascot .water, .mascot .kibble,
+.mascot .zz, .mascot .box, .mascot .sand { display: none; }
+.mascot[data-scene=drink] :is(.bowl, .water, .tongue) { display: inline; }
+.mascot[data-scene=drink] .head { animation: lap .55s ease-in-out infinite alternate; }
+.mascot[data-scene=drink] .tongue { transform-origin: 50% 0%; animation: flick .55s ease-in-out infinite alternate; }
+.mascot[data-scene=drink] .ripple { transform-origin: center; animation: ripple 1.1s ease-out infinite; }
+.mascot[data-scene=eat] :is(.bowl, .kibble, .tongue) { display: inline; }
+.mascot[data-scene=eat] .bowl path { fill: var(--nose); }
+.mascot[data-scene=eat] .head { animation: chomp .3s ease-in-out infinite alternate; }
+.mascot[data-scene=eat] .kibble > * { animation: hop .6s ease-out infinite; }
+.mascot[data-scene=eat] .kibble > :nth-child(2) { animation-delay: .2s; }
+.mascot[data-scene=eat] .kibble > :nth-child(3) { animation-delay: .4s; }
+.mascot[data-scene=sleep] .eyes-open { display: none; }
+.mascot[data-scene=sleep] :is(.eyes-closed, .zz) { display: inline; }
+.mascot[data-scene=sleep] .head { transform: translate(0, 8px) rotate(-12deg); }
+.mascot[data-scene=sleep] .tail { animation: none; }
+.mascot[data-scene=sleep] .body-g { transform-origin: 50% 100%; animation: breathe 2.6s ease-in-out infinite; }
+.mascot[data-scene=sleep] .zz text { animation: zfloat 3s ease-in infinite; opacity: 0; }
+.mascot[data-scene=sleep] .zz text:nth-child(2) { animation-delay: 1s; }
+.mascot[data-scene=sleep] .zz text:nth-child(3) { animation-delay: 2s; }
+.mascot[data-scene=litter] :is(.box, .sand) { display: inline; }
+.mascot[data-scene=litter] .head { animation: look 1.6s ease-in-out infinite; }
+.mascot[data-scene=litter] .sand > * { animation: hop .7s ease-out infinite; }
+.mascot[data-scene=litter] .sand > :nth-child(2) { animation-delay: .25s; }
+.mascot[data-scene=litter] .sand > :nth-child(3) { animation-delay: .5s; }
+.blink { animation: blink 4.5s infinite; transform-origin: center; transform-box: fill-box; }
+@keyframes blink   { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
+@keyframes sway    { 0%, 100% { transform: rotate(-6deg); } 50% { transform: rotate(10deg); } }
+@keyframes lap     { from { transform: translateY(13px); } to { transform: translateY(17px); } }
+@keyframes flick   { from { transform: scaleY(.4); } to { transform: scaleY(1.2); } }
+@keyframes ripple  { from { transform: scale(.4); opacity: 1; } to { transform: scale(1.3); opacity: 0; } }
+@keyframes chomp   { from { transform: translateY(10px); } to { transform: translateY(15px) rotate(3deg); } }
+@keyframes hop     { 0% { transform: translateY(0); opacity: 1; } 100% { transform: translateY(-14px); opacity: 0; } }
+@keyframes breathe { 0%, 100% { transform: scale(1, 1); } 50% { transform: scale(1.03, 1.06); } }
+@keyframes zfloat  { 0% { transform: translate(0, 6px); opacity: 0; } 25% { opacity: 1; } 100% { transform: translate(8px, -18px); opacity: 0; } }
+@keyframes look    { 0%, 100% { transform: rotate(-7deg); } 50% { transform: rotate(7deg); } }
+
+/* ===================== Bottom sheets ===================== */
+.scrim { position: fixed; inset: 0; background: rgba(46,33,64,.35); opacity: 0; pointer-events: none; transition: opacity .2s; }
+.sheet {
+  position: fixed; left: 50%; bottom: 0; width: min(420px, 100%); transform: translate(-50%, 105%);
+  background: var(--paper); border: var(--line) solid var(--ink); border-bottom: 0; border-radius: 30px 30px 0 0;
+  padding: 14px 20px 28px; transition: transform .28s cubic-bezier(.2,.9,.3,1.2); max-height: 88dvh; overflow-y: auto;
+}
+.sheet-open .scrim { opacity: 1; pointer-events: auto; }
+.sheet.open { transform: translate(-50%, 0); }
+.grabber { width: 54px; height: 6px; border-radius: 9px; background: var(--ink); margin: 0 auto 18px; opacity: .25; }
+.sheet h3 { font-size: 18px; font-weight: 600; margin: 18px 0 4px; }
+.sheet h2 + h3, .sheet .grabber + h3 { margin-top: 0; }
+.sheet .call { margin-top: 20px; padding: 14px 16px; background: var(--bowl); border: 2.5px solid var(--ink); border-radius: 18px; }
+.sheet .btn { margin-top: 22px; }
+
+/* weekly report rows */
+.week { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; }
+.wk { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; align-items: center; }
+.wk .t { font-weight: 600; }
+.wk .s { color: var(--ink-soft); font-size: 15px; grid-column: 1; }
+.wk svg { grid-row: 1 / span 2; grid-column: 2; width: 132px; height: 48px; }
+.wk rect { fill: var(--butter); stroke: var(--ink); stroke-width: 2; }
+.wk rect.gap { fill: none; stroke-dasharray: 3 3; }
+.wk line { stroke: var(--ink); stroke-width: 2; stroke-dasharray: 5 4; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mascot *, .mascot .head, .blink { animation: none !important; }
+  .mascot[data-scene=sleep] .zz text { opacity: 1; }
+  .sheet, .scrim, .btn { transition: none; }
+}
+</style>
+</head>
+<body>
+<!-- Ears drawn once, reused by every sticker -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="ears" viewBox="0 0 200 80">
+    <path d="M22 78 L38 8 L92 60 Z"/><path d="M40 62 L46 30 L72 56 Z" fill="#FF8FAB" stroke="none"/>
+    <path d="M178 78 L162 8 L108 60 Z"/><path d="M160 62 L154 30 L128 56 Z" fill="#FF8FAB" stroke="none"/>
+  </symbol>
+</svg>
+
+<div class="app">
+
+  <!-- ============ 1. Welcome ============ -->
+  <section class="screen active" id="welcome" aria-labelledby="welcome-title">
+    <div class="sticker" style="--ring: var(--butter)">
+      <svg class="ears" viewBox="0 0 200 80" aria-hidden="true"><use href="#ears"/></svg>
+      <div class="face"><svg data-face viewBox="0 0 120 120" role="img" aria-label="Cartoon cat"></svg></div>
+    </div>
+    <h1 id="welcome-title">Purrcast</h1>
+    <p class="lead">Small scales under the bowls, litter box and bed. One simple update when your cat's habits change.</p>
+    <button class="btn" data-go="account">Create account</button>
+  </section>
+
+  <!-- ============ 2. Account ============ -->
+  <section class="screen" id="account" aria-labelledby="account-title">
+    <button class="link-btn back" data-go="welcome">Back</button>
+    <h2 id="account-title">Create your account</h2>
+    <label class="field">Your name <input class="input" id="owner-name" autocomplete="name" placeholder="Sam"></label>
+    <label class="field">Email <input class="input" id="owner-email" type="email" autocomplete="email" placeholder="sam@example.com"></label>
+    <label class="field">Vet clinic <span class="hint">Optional. Shown when it's time to contact your vet.</span>
+      <input class="input" id="owner-vet" placeholder="Whyte Ave Animal Clinic"></label>
+    <button class="btn" id="account-btn" disabled>Next: add your cat</button>
+  </section>
+
+  <!-- ============ 3. Add your cat ============ -->
+  <section class="screen" id="cat" aria-labelledby="cat-title">
+    <button class="link-btn back" data-go="account">Back</button>
+    <h2 id="cat-title">Tell us about your cat</h2>
+
+    <label class="sticker upload" style="--ring: var(--butter)">
+      <svg class="ears" viewBox="0 0 200 80" aria-hidden="true"><use href="#ears"/></svg>
+      <div class="face" id="cat-face"></div>
+      <span class="upload-hint" id="photo-hint">Add photo</span>
+      <input type="file" accept="image/*" id="photo-input" aria-label="Upload a photo of your cat">
+    </label>
+
+    <label class="field">Name <input class="input" id="cat-name" maxlength="20" placeholder="Luna" autocomplete="off"></label>
+
+    <div class="pair">
+      <div class="field"><span id="age-label">Age</span>
+        <div class="stepper" role="group" aria-labelledby="age-label">
+          <button type="button" data-step="age" data-d="-1" aria-label="Younger">–</button>
+          <output id="cat-age">3 yrs</output>
+          <button type="button" data-step="age" data-d="1" aria-label="Older">+</button>
+        </div>
+      </div>
+      <div class="field"><span id="weight-label">Weight</span>
+        <div class="stepper" role="group" aria-labelledby="weight-label">
+          <button type="button" data-step="weight" data-d="-0.1" aria-label="Lighter">–</button>
+          <output id="cat-weight">4.2 kg</output>
+          <button type="button" data-step="weight" data-d="0.1" aria-label="Heavier">+</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="field"><span id="sex-label">Your cat is a</span>
+      <div class="toggle" role="radiogroup" aria-labelledby="sex-label">
+        <input type="radio" name="sex" id="sex-f" value="female" checked><label for="sex-f">Girl</label>
+        <input type="radio" name="sex" id="sex-m" value="male"><label for="sex-m">Boy</label>
+      </div>
+    </div>
+
+    <div class="field"><span id="coat-label">Coat colour <span class="hint">Picked from the photo; change it if it's off.</span></span>
+      <div class="swatches" id="swatches" role="radiogroup" aria-labelledby="coat-label"></div>
+    </div>
+
+    <label class="field">Known conditions <span class="hint">Optional, e.g. kidney disease. Shared in the vet report.</span>
+      <input class="input" id="cat-conditions" placeholder="None"></label>
+
+    <button class="btn" id="cat-btn" disabled>Add your cat's name</button>
+  </section>
+
+  <!-- ============ 4. Pair sensors ============ -->
+  <section class="screen" id="pair" aria-labelledby="pair-title">
+    <button class="link-btn back" data-go="cat">Back</button>
+    <h2 id="pair-title">Pair your scales</h2>
+    <p class="soft">Put each scale in place, then tap Scan.</p>
+    <div class="sensors" id="sensors"></div>
+
+    <div class="demo-note">
+      <p>Demo: which simulated cat's data should <span data-catname></span> use?</p>
+      <div class="chips" id="link-chips"></div>
+    </div>
+
+    <button class="btn" id="pair-btn" disabled>Scan all 4 scales</button>
+  </section>
+
+  <!-- ============ 5. Learning ============ -->
+  <section class="screen" id="learning" aria-labelledby="learning-title">
+    <div class="sticker small" id="learn-sticker" style="--ring: var(--butter)">
+      <svg class="ears" viewBox="0 0 200 80" aria-hidden="true"><use href="#ears"/></svg>
+      <div class="face" id="learn-face"></div>
+    </div>
+    <h2 id="learning-title">Learning <span data-catname></span>'s routine</h2>
+    <p class="soft">Every cat is different, so Purrcast first learns what's normal for <span data-catname></span>. Your first daily summary arrives in 14 days.</p>
+    <div class="progress" aria-label="Day 1 of 14"><div></div></div>
+    <p class="soft">Day 1 of 14</p>
+    <button class="btn" id="jump-btn">Demo: jump ahead to day 60</button>
+  </section>
+
+  <!-- ============ 6. Home ============ -->
+  <section class="screen" id="home" aria-label="Today">
+    <div class="topbar">
+      <span class="brand">Purrcast</span>
+      <button class="link-btn" id="edit-cat">Edit cat</button>
+    </div>
+
+    <div class="who">
+      <div class="sticker" id="home-sticker">
+        <svg class="ears" viewBox="0 0 200 80" aria-hidden="true"><use href="#ears"/></svg>
+        <div class="face" id="home-face"></div>
+      </div>
+      <p class="name" data-catname></p>
+    </div>
+
+    <div class="bubble" aria-live="polite">
+      <span class="level" id="level"></span>
+      <p id="message"></p>
+    </div>
+
+    <!-- Right now: Purrcast's mascot, in the cat's coat colour, acts out the latest activity -->
+    <div class="now" aria-live="polite">
+      <div class="stage"><svg class="mascot" id="mascot" data-scene="idle" viewBox="0 0 160 130" role="img" aria-labelledby="now-what"></svg></div>
+      <div><p class="what" id="now-what"></p><p class="when" id="now-when"></p></div>
+    </div>
+
+    <div class="tiles" id="tiles"></div>
+
+    <div class="row">
+      <button class="btn quiet" id="more-btn">See more</button>
+      <button class="btn quiet" id="week-btn">This week</button>
+    </div>
+
+    <div class="demo demo-note">
+      <p>Demo: simulated data from</p>
+      <div class="chips" id="home-link-chips"></div>
+      <p>Demo: preview the animation</p>
+      <div class="chips" id="activity-chips"></div>
+      <button class="link-btn" id="reset" style="align-self:flex-start">Start over</button>
+    </div>
+  </section>
+</div>
+
+<!-- ============ "See more" sheet ============ -->
+<div class="scrim" id="scrim"></div>
+<div class="sheet" id="more-sheet" role="dialog" aria-modal="true" aria-labelledby="more-title" hidden>
+  <div class="grabber"></div>
+  <h3 id="more-title">What changed</h3>
+  <p id="d-changed"></p>
+  <div id="d-check-wrap"><h3>Things to check</h3><p id="d-check"></p></div>
+  <div class="call"><h3 style="margin-top:0">When to contact your vet</h3><p id="d-call"></p><p class="soft" id="d-vet"></p></div>
+  <button class="btn" data-close>Close</button>
+</div>
+
+<!-- ============ Weekly report sheet ============ -->
+<div class="sheet" id="week-sheet" role="dialog" aria-modal="true" aria-labelledby="week-title" hidden>
+  <div class="grabber"></div>
+  <h2 id="week-title" style="font-size:24px">This week</h2>
+  <p class="soft">Bars are the last 7 days. The dashed line is <span data-catname></span>'s usual.</p>
+  <div class="week" id="week"></div>
+  <p class="soft" id="week-gaps" style="margin-top:14px"></p>
+  <button class="btn" data-close>Close</button>
+</div>
+
+<script>
+/* ============================================================
+   Purrcast UI concept
+   Talks to the backend at ?api=... (default http://localhost:8000 when served
+   over http). If the backend isn't reachable it uses built-in examples.
+   ============================================================ */
+const $ = id => document.getElementById(id);
+const params = new URLSearchParams(location.search);
+// Backend runs on the same computer as the UI, port 8000 (works on a phone too)
+const API = params.get("api") || (location.protocol.startsWith("http") ? `http://${location.hostname}:8000` : null);
+
+// localStorage can be blocked; never let it break the app
+const store = {
+  get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* keep in memory only */ } },
+  clear() { try { localStorage.removeItem("purrcast"); } catch {} },
+};
+
+/* ---------------- Drawings ---------------- */
+// Front-facing cartoon face, in the cat's coat colour (used before a photo is added)
+const FACE = `
+  <rect width="120" height="120" fill="#FFF3D6"/>
+  <ellipse class="fur" cx="60" cy="72" rx="44" ry="40" stroke="#2E2140" stroke-width="4"/>
+  <path class="fur-dark" d="M30 50 Q38 44 46 50 M74 50 Q82 44 90 50" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <g class="blink"><ellipse class="eye" cx="44" cy="68" rx="6" ry="8"/><ellipse class="eye" cx="76" cy="68" rx="6" ry="8"/>
+    <circle cx="46" cy="65" r="2" fill="#fff"/><circle cx="78" cy="65" r="2" fill="#fff"/></g>
+  <path d="M56 80 L64 80 L60 85 Z" fill="#FF8FAB" stroke="#2E2140" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M60 85 Q55 92 49 89 M60 85 Q65 92 71 89" stroke="#2E2140" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <circle cx="34" cy="82" r="6" fill="#FF8FAB" opacity=".55"/><circle cx="86" cy="82" r="6" fill="#FF8FAB" opacity=".55"/>
+  <path d="M18 78 L36 80 M18 88 L36 85 M102 78 L84 80 M102 88 L84 85" stroke="#2E2140" stroke-width="2.5" stroke-linecap="round"/>`;
+
+// Sitting mascot with props for each activity. Always calm: status lives in text and colour.
+const MASCOT = `
+  <g class="box"><path class="m-outline" d="M22 96 H138 V126 H22 Z" fill="#FFD66B"/></g>
+  <g class="tail"><path d="M108 112 Q140 108 136 74 Q134 62 142 56" fill="none" stroke="#2E2140" stroke-width="10" stroke-linecap="round"/>
+    <path d="M108 112 Q140 108 136 74 Q134 62 142 56" fill="none" style="stroke:var(--fur)" stroke-width="5" stroke-linecap="round"/></g>
+  <g class="body-g">
+    <ellipse class="m-outline fur" cx="80" cy="102" rx="33" ry="27"/>
+    <ellipse class="fur-light" cx="80" cy="108" rx="16" ry="14"/>
+    <ellipse class="m-outline fur" cx="68" cy="126" rx="9" ry="5" stroke-width="3"/>
+    <ellipse class="m-outline fur" cx="92" cy="126" rx="9" ry="5" stroke-width="3"/>
+  </g>
+  <g class="head">
+    <path class="m-outline fur" d="M57 46 L58 18 L77 34 Z"/><path d="M61 38 L62 26 L71 34 Z" fill="#FF8FAB"/>
+    <path class="m-outline fur" d="M103 46 L102 18 L83 34 Z"/><path d="M99 38 L98 26 L89 34 Z" fill="#FF8FAB"/>
+    <circle class="m-outline fur" cx="80" cy="58" r="27"/>
+    <path class="fur-dark" d="M70 37 Q74 33 78 37 M82 37 Q86 33 90 37" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <g class="eyes-open blink"><ellipse class="eye" cx="70" cy="58" rx="4" ry="5.5"/><ellipse class="eye" cx="90" cy="58" rx="4" ry="5.5"/>
+      <circle cx="71.5" cy="56" r="1.5" fill="#fff"/><circle cx="91.5" cy="56" r="1.5" fill="#fff"/></g>
+    <g class="eyes-closed"><path d="M65 59 Q70 63 75 59 M85 59 Q90 63 95 59" stroke="#2E2140" stroke-width="3" fill="none" stroke-linecap="round"/></g>
+    <ellipse class="tongue" cx="80" cy="74" rx="4" ry="5" fill="#FF8FAB" stroke="#2E2140" stroke-width="2"/>
+    <path d="M77 66 L83 66 L80 69 Z" fill="#FF8FAB" stroke="#2E2140" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M80 69 Q77 73 73 71 M80 69 Q83 73 87 71" stroke="#2E2140" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+    <circle cx="63" cy="67" r="4" fill="#FF8FAB" opacity=".5"/><circle cx="97" cy="67" r="4" fill="#FF8FAB" opacity=".5"/>
+  </g>
+  <g class="bowl"><path class="m-outline" d="M50 108 H110 L104 128 H56 Z" fill="#8EC9FF"/></g>
+  <g class="water"><ellipse cx="80" cy="108" rx="28" ry="4" fill="#CFE8FF" stroke="#2E2140" stroke-width="2.5"/>
+    <ellipse class="ripple" cx="80" cy="108" rx="12" ry="2" fill="none" stroke="#fff" stroke-width="2"/></g>
+  <g class="kibble bits"><circle cx="70" cy="104" r="3.5" fill="#C98B4E" stroke="#2E2140" stroke-width="2"/>
+    <circle cx="82" cy="102" r="3.5" fill="#C98B4E" stroke="#2E2140" stroke-width="2"/>
+    <circle cx="92" cy="104" r="3.5" fill="#C98B4E" stroke="#2E2140" stroke-width="2"/></g>
+  <g class="box"><path class="m-outline" d="M22 112 H138 V126 H22 Z" fill="#FFD66B"/>
+    <path d="M26 112 Q50 104 80 110 Q110 104 134 112" fill="#F3E6C8" stroke="#2E2140" stroke-width="3"/></g>
+  <g class="sand bits"><circle cx="40" cy="104" r="2.5" fill="#E6D3A8"/><circle cx="120" cy="102" r="2.5" fill="#E6D3A8"/><circle cx="50" cy="100" r="2" fill="#E6D3A8"/></g>
+  <g class="zz" font-family="Fredoka, sans-serif" font-weight="700" fill="#2E2140">
+    <text x="108" y="38" font-size="14">z</text><text x="118" y="28" font-size="17">z</text><text x="130" y="18" font-size="20">Z</text></g>`;
+
+const ICONS = {
+  water: `<svg viewBox="0 0 40 40"><path d="M20 5 C26 14 31 20 31 26 a11 11 0 0 1 -22 0 C9 20 14 14 20 5Z" fill="#8EC9FF" stroke="#2E2140" stroke-width="3" stroke-linejoin="round"/><path d="M15 27 a5 5 0 0 0 5 5" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"/></svg>`,
+  food: `<svg viewBox="0 0 40 40"><path d="M5 20 H35 L31 32 H9 Z" fill="#FF8FAB" stroke="#2E2140" stroke-width="3" stroke-linejoin="round"/><circle cx="14" cy="17" r="3.5" fill="#C98B4E" stroke="#2E2140" stroke-width="2.5"/><circle cx="21" cy="15" r="3.5" fill="#C98B4E" stroke="#2E2140" stroke-width="2.5"/><circle cx="27" cy="17.5" r="3.5" fill="#C98B4E" stroke="#2E2140" stroke-width="2.5"/></svg>`,
+  litter: `<svg viewBox="0 0 40 40"><path d="M4 18 H36 V31 a3 3 0 0 1 -3 3 H7 a3 3 0 0 1 -3 -3 Z" fill="#FFD66B" stroke="#2E2140" stroke-width="3" stroke-linejoin="round"/><path d="M9 18 Q14 12 20 15 Q26 11 31 18" fill="#F3E6C8" stroke="#2E2140" stroke-width="3" stroke-linejoin="round"/></svg>`,
+  weight: `<svg viewBox="0 0 40 40"><rect x="5" y="9" width="30" height="24" rx="7" fill="#7FD8A4" stroke="#2E2140" stroke-width="3"/><path d="M13 19 a7 7 0 0 1 14 0" fill="#fff" stroke="#2E2140" stroke-width="3"/><path d="M20 19 L23 15" stroke="#2E2140" stroke-width="3" stroke-linecap="round"/></svg>`,
+  bed: `<svg viewBox="0 0 40 40"><rect x="4" y="18" width="32" height="14" rx="7" fill="#C9B8F0" stroke="#2E2140" stroke-width="3"/><ellipse cx="20" cy="20" rx="11" ry="5" fill="#fff" stroke="#2E2140" stroke-width="3"/></svg>`,
+};
+document.querySelectorAll("[data-face]").forEach(s => s.innerHTML = FACE);
+$("mascot").innerHTML = MASCOT;
+
+/* ---------------- Status data ---------------- */
+const LEVELS = {
+  good:   { label: "All good",          color: "var(--good)" },
+  blip:   { label: "Minor blip",        color: "var(--blip)" },
+  vet:    { label: "Worth a vet visit", color: "var(--vet)" },
+  urgent: { label: "Call your vet now", color: "var(--urgent)" },
+};
+
+// Used only when the backend isn't reachable. Mirrors the simulator's 4 cats.
+const FALLBACK_CATS = [
+  { cat_id: "mochi", name: "Mochi", level: "good" },
+  { cat_id: "luna",  name: "Luna",  level: "blip" },
+  { cat_id: "lena",  name: "Lena",  level: "vet" },
+  { cat_id: "oscar", name: "Oscar", level: "urgent" },
+];
+const HINTS = { good: "steady", blip: "one odd day", vet: "slow change", urgent: "urgent pattern" };
+
+// Built-in examples, copied from the engine's real output. {name}/{she}/{her} are filled in.
+const EXAMPLES = {
+  good: { message: "{name}'s patterns have been consistent over the last 24 hours. If you notice any other symptoms, contact your vet.",
+    tiles: { water: "steady", food: "steady", litter: "steady", weight: "steady" },
+    details: { changed: "Eating, drinking, litter use, weight and rest are all consistent with {her} usual patterns.", maybe_nothing: "",
+      call_if: "Purrcast tracks changes in habits and measurements; it can't detect every illness. If you notice any other symptoms, contact your vet." } },
+  blip: { message: "{name}'s patterns have changed: {she} drank about 43% more than usual yesterday.",
+    tiles: { water: "up", food: "steady", litter: "steady", weight: "steady" },
+    details: { changed: "Water 301 ml yesterday vs {her} usual 210 ml. Everything else is consistent with usual.",
+      maybe_nothing: "Is {her} water bowl in a warm spot? Has {her} food changed (dry vs wet)? Has {she} been more active? We'll keep watching over the next 48 hours.",
+      call_if: "If you have any concerns, contact your vet." } },
+  vet: { message: "{name}'s patterns have changed: {she} has been drinking more and leaving more in the litter box.",
+    tiles: { water: "up", food: "steady", litter: "up", weight: "steady" },
+    details: { changed: "Drinking more and leaving more in the litter box at the same time.",
+      maybe_nothing: "Is {her} water bowl in a warm spot? Has {her} food changed (dry vs wet)? Has {she} been more active?",
+      call_if: "This change has lasted long enough that it's worth mentioning to your vet. Contact them sooner if {she} stops eating, hides, vomits, or strains in the litter box." } },
+  urgent: { message: "{name} has visited the litter box 20 times in the last day with very little output. This pattern can need urgent care. Contact your vet or an emergency clinic now.",
+    tiles: { water: "steady", food: "steady", litter: "many visits", weight: "steady" },
+    details: { changed: "20 litter visits in the last day (usually about 4) with very little left behind.", maybe_nothing: "",
+      call_if: "Contact your vet or an emergency clinic now. Don't wait to see if it passes." } },
+};
+const FALLBACK_NOW = { good: "litter", blip: "eat", vet: "eat", urgent: "drink" };
+const NOW_TEXT = { idle: "Relaxing", drink: "Drank 14 ml at 9:12 PM", eat: "Ate 8 g at 10:56 PM",
+                   litter: "Used the litter box at 10:24 PM", sleep: "Napping on the bed since 11:40 PM (1 h 20 min)" };
+const NOW_TITLE = { idle: "{name} is relaxing", drink: "{name} had a drink", eat: "{name} had a snack",
+                    litter: "{name} used the litter box", sleep: "{name} is napping" };
+
+/* ---------------- App state ---------------- */
+let state = store.get("purrcast") || { step: "welcome" };
+state.cat = state.cat || { age: 3, weight: 4.2, sex: "female", coat: null, photo: null };
+state.paired = state.paired || [];
+state.linkId = state.linkId || "luna";
+let simCats = FALLBACK_CATS;
+let online = false;
+let current = null;      // last status shown
+let preview = null;      // mascot preview override
+const save = () => store.set("purrcast", state);
+
+function show(step) {
+  state.step = step; save();
+  document.querySelectorAll(".screen").forEach(s => s.classList.toggle("active", s.id === step));
+  document.querySelectorAll("[data-catname]").forEach(e => e.textContent = state.cat.name || "your cat");
+  window.scrollTo(0, 0);
+  if (step === "pair") renderPair();
+  if (step === "learning") $("learn-face").innerHTML = faceHTML();
+  if (step === "home") renderHome();
+}
+document.querySelectorAll("[data-go]").forEach(b => b.addEventListener("click", () => show(b.dataset.go)));
+
+const pron = sex => sex === "male" ? { she: "he", her: "his" } : { she: "she", her: "her" };
+const fill = t => { const p = pron(state.cat.sex);
+  return t.replaceAll("{name}", state.cat.name).replaceAll("{she}", p.she).replaceAll("{her}", p.her); };
+const faceHTML = () => state.cat.photo
+  ? `<img src="${state.cat.photo}" alt="${state.cat.name || "Your cat"}">`
+  : `<svg viewBox="0 0 120 120" aria-hidden="true">${FACE}</svg>`;
+
+/* ---------------- Coat colour ---------------- */
+const COATS = [
+  { name: "Ginger", fur: "#F2A65A" }, { name: "Black", fur: "#3B3542" }, { name: "Grey", fur: "#9EA3AD" },
+  { name: "White", fur: "#F6F2EA" }, { name: "Brown", fur: "#8C5E3C" }, { name: "Cream", fur: "#EBCF9E" },
+];
+const hex2rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+const rgb2hex = c => "#" + c.map(v => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, "0")).join("");
+const mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+const lum = ([r, g, b]) => (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+
+// Shades for the stripes and belly are derived from the main fur colour
+function setCoat(fur) {
+  const c = hex2rgb(fur), dark = lum(c) < 0.3;
+  const root = document.documentElement.style;
+  root.setProperty("--fur", fur);
+  root.setProperty("--fur-dark", rgb2hex(dark ? mix(c, [255, 255, 255], 0.25) : mix(c, [46, 33, 64], 0.25)));
+  root.setProperty("--fur-light", rgb2hex(mix(c, [255, 255, 255], dark ? 0.2 : 0.55)));
+  root.setProperty("--eye", dark ? "#F2D45C" : "#2E2140");   // yellow eyes on dark cats so they show
+}
+
+// Main colour of the cat in the photo: k-means on the middle of the image
+function coatFromPhoto(canvas) {
+  const s = 40, c = document.createElement("canvas"); c.width = c.height = s;
+  const ctx = c.getContext("2d"); ctx.drawImage(canvas, 0, 0, s, s);
+  const px = ctx.getImageData(0, 0, s, s).data, pts = [];
+  for (let y = 0; y < s; y++) for (let x = 0; x < s; x++) {
+    const dx = x - s / 2, dy = y - s / 2;
+    if (dx * dx + dy * dy > (s * 0.32) ** 2) continue;          // centre circle: usually the cat, not the background
+    const i = (y * s + x) * 4; pts.push([px[i], px[i + 1], px[i + 2]]);
+  }
+  let cent = [pts[0], pts[Math.floor(pts.length / 2)], pts[pts.length - 1]];
+  let groups = [];
+  for (let it = 0; it < 8; it++) {
+    groups = cent.map(() => []);
+    for (const p of pts) {
+      let best = 0, bd = Infinity;
+      cent.forEach((q, k) => { const d = (p[0]-q[0])**2 + (p[1]-q[1])**2 + (p[2]-q[2])**2; if (d < bd) { bd = d; best = k; } });
+      groups[best].push(p);
+    }
+    cent = groups.map((g, k) => g.length ? [0, 1, 2].map(j => g.reduce((a, p) => a + p[j], 0) / g.length) : cent[k]);
+  }
+  const biggest = groups.reduce((bi, g, k) => g.length > groups[bi].length ? k : bi, 0);
+  return rgb2hex(cent[biggest]);
+}
+
+function renderSwatches() {
+  const list = state.cat.photoCoat ? [{ name: "From photo", fur: state.cat.photoCoat }, ...COATS] : COATS;
+  const selected = state.cat.coat || list[0].fur;
+  $("swatches").innerHTML = list.map(c =>
+    `<button type="button" class="swatch" role="radio" style="--c:${c.fur}" aria-label="${c.name}" aria-pressed="${c.fur === selected}" aria-checked="${c.fur === selected}" data-fur="${c.fur}"></button>`).join("");
+  document.querySelectorAll("[data-fur]").forEach(b => b.addEventListener("click", () => {
+    state.cat.coat = b.dataset.fur; setCoat(b.dataset.fur); save(); renderSwatches(); }));
+  setCoat(selected);
+}
+
+/* ---------------- Account ---------------- */
+function checkAccount() { $("account-btn").disabled = !($("owner-name").value.trim() && $("owner-email").value.includes("@")); }
+["owner-name", "owner-email"].forEach(id => $(id).addEventListener("input", checkAccount));
+$("account-btn").addEventListener("click", () => {
+  state.owner = { name: $("owner-name").value.trim(), email: $("owner-email").value.trim(), vet: $("owner-vet").value.trim() };
+  show("cat");
+});
+
+/* ---------------- Cat profile ---------------- */
+function renderCatForm() {
+  const c = state.cat;
+  $("cat-face").innerHTML = faceHTML();
+  $("photo-hint").textContent = c.photo ? "Change" : "Add photo";
+  $("cat-name").value = c.name || "";
+  $("cat-age").textContent = c.age === 0 ? "Kitten" : `${c.age} yr${c.age === 1 ? "" : "s"}`;
+  $("cat-weight").textContent = `${c.weight.toFixed(1)} kg`;
+  document.querySelector(`input[name=sex][value=${c.sex}]`).checked = true;
+  $("cat-conditions").value = c.conditions || "";
+  renderSwatches(); updateCatBtn();
+}
+function updateCatBtn() {
+  const n = $("cat-name").value.trim();
+  $("cat-btn").disabled = !n;
+  $("cat-btn").textContent = !n ? "Add your cat's name" : (state.paired.length === 4 ? "Save" : `Next: pair ${n}'s scales`);
+}
+$("cat-name").addEventListener("input", updateCatBtn);
+document.querySelectorAll("[data-step]").forEach(b => b.addEventListener("click", () => {
+  const c = state.cat, d = Number(b.dataset.d);
+  if (b.dataset.step === "age") c.age = Math.min(25, Math.max(0, c.age + d));
+  else c.weight = Math.round(Math.min(12, Math.max(1, c.weight + d)) * 10) / 10;
+  renderCatForm();
+}));
+document.querySelectorAll("input[name=sex]").forEach(r => r.addEventListener("change", () => state.cat.sex = r.value));
+
+$("photo-input").addEventListener("change", e => {
+  const file = e.target.files[0]; if (!file) return;
+  const img = new Image();
+  img.onload = () => {
+    const size = 360, cv = document.createElement("canvas"); cv.width = cv.height = size;
+    const s = Math.min(img.width, img.height);           // square crop from the centre
+    cv.getContext("2d").drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, size, size);
+    state.cat.photo = cv.toDataURL("image/jpeg", 0.85);
+    state.cat.photoCoat = coatFromPhoto(cv);
+    state.cat.coat = state.cat.photoCoat;                 // auto-pick, owner can change it
+    URL.revokeObjectURL(img.src);
+    state.cat.name = $("cat-name").value.trim();
+    renderCatForm(); save();
+  };
+  img.src = URL.createObjectURL(file);
+});
+
+$("cat-btn").addEventListener("click", () => {
+  Object.assign(state.cat, { name: $("cat-name").value.trim(), conditions: $("cat-conditions").value.trim() });
+  show(state.paired.length === 4 ? "home" : "pair");
+});
+
+/* ---------------- Pairing ---------------- */
+const SENSORS = [
+  { id: "food", icon: "food", name: "Food bowl scale" }, { id: "water", icon: "water", name: "Water bowl scale" },
+  { id: "litter", icon: "litter", name: "Litter box scale" }, { id: "bed", icon: "bed", name: "Bed scale" },
+];
+function linkChips(el, onPick) {
+  el.innerHTML = simCats.map(c =>
+    `<button class="chip" aria-pressed="${c.cat_id === state.linkId}" data-link="${c.cat_id}">${c.name} (${HINTS[c.level] || c.level})</button>`).join("");
+  el.querySelectorAll("[data-link]").forEach(b => b.addEventListener("click", () => {
+    state.linkId = b.dataset.link; save(); linkChips(el, onPick); onPick && onPick(); }));
+}
+function renderPair() {
+  $("sensors").innerHTML = SENSORS.map(s => {
+    const done = state.paired.includes(s.id);
+    return `<div class="sensor${done ? " paired" : ""}">${ICONS[s.icon]}
+      <div class="s-name">${s.name}<span>${done ? `Paired to ${state.cat.name}` : "Not paired"}</span></div>
+      <button class="btn small" data-scan="${s.id}" ${done ? "disabled" : ""}>${done ? "Paired" : "Scan"}</button></div>`;
+  }).join("");
+  document.querySelectorAll("[data-scan]").forEach(b => b.addEventListener("click", () => scan(b.dataset.scan)));
+  linkChips($("link-chips"));
+  const all = state.paired.length === 4;
+  $("pair-btn").disabled = false;
+  $("pair-btn").textContent = all ? "Start learning" : "Scan all 4 scales";
+}
+function scan(id) {
+  const b = document.querySelector(`[data-scan=${id}]`); if (!b) return Promise.resolve();
+  b.textContent = "Searching…"; b.disabled = true;
+  return new Promise(r => setTimeout(() => { if (!state.paired.includes(id)) state.paired.push(id); save(); renderPair(); r(); }, 600));
+}
+$("pair-btn").addEventListener("click", async () => {
+  if (state.paired.length === 4) return show("learning");
+  for (const s of SENSORS) if (!state.paired.includes(s.id)) await scan(s.id);
+});
+
+$("jump-btn").addEventListener("click", () => show("home"));
+
+/* ---------------- Talking to the backend ---------------- */
+async function api(path) {
+  if (!API) throw new Error("no api");
+  const r = await fetch(API + path);
+  if (!r.ok) throw new Error(r.status);
+  return r.json();
+}
+
+// The simulated cat's name and pronouns are swapped for the owner's cat
+async function personalise(text, simName) {
+  let t = (text || "").replaceAll(simName, state.cat.name);
+  const simSex = (simCats.find(c => c.cat_id === state.linkId) || {}).sex;
+  if (simSex && simSex !== state.cat.sex) {
+    t = state.cat.sex === "male"
+      ? t.replace(/\bShe\b/g, "He").replace(/\bshe\b/g, "he").replace(/\bher\b/g, "his")
+      : t.replace(/\bHe\b/g, "She").replace(/\bhe\b/g, "she").replace(/\b(his|him)\b/g, "her");
+  }
+  return t;
+}
+
+async function loadCats() {
+  try {
+    const cats = await api("/cats");
+    // sex lets us fix pronouns; it comes from the vet report
+    await Promise.all(cats.map(async c => { try { c.sex = (await api(`/cats/${c.cat_id}/vet-report`)).sex; } catch {} }));
+    simCats = cats; online = true;
+    if (!cats.some(c => c.cat_id === state.linkId)) state.linkId = cats[0].cat_id;
+  } catch { simCats = FALLBACK_CATS; online = false; }
+}
+
+async function getStatus() {
+  const sim = simCats.find(c => c.cat_id === state.linkId) || simCats[0];
+  if (online) {
+    try {
+      const s = await api(`/cats/${sim.cat_id}/status`);
+      const P = t => personalise(t, s.name);
+      return { level: s.level, message: await P(s.message),
+        tiles: Object.fromEntries(s.tiles.map(t => [t.key, t.label.replace(/^\w+:?\s*/, "")])),
+        details: { changed: await P(s.details.changed),
+                   maybe_nothing: (await P(s.details.maybe_nothing)).replace(/^Things to check:\s*/, ""),
+                   call_if: await P(s.details.call_if) } };
+    } catch {}
+  }
+  const ex = EXAMPLES[sim.level];
+  return { level: sim.level, message: fill(ex.message), tiles: ex.tiles,
+           details: Object.fromEntries(Object.entries(ex.details).map(([k, v]) => [k, fill(v)])) };
+}
+
+async function getNow(level) {
+  if (online) { try { const n = await api(`/cats/${state.linkId}/now`); return { scene: n.scene, text: n.text }; } catch {} }
+  const scene = FALLBACK_NOW[level] || "idle";
+  return { scene, text: NOW_TEXT[scene] };
+}
+
+/* ---------------- Home ---------------- */
+async function renderHome() {
+  setCoat(state.cat.coat || COATS[0].fur);
+  $("home-face").innerHTML = faceHTML();
+  const s = await getStatus(); current = s;
+  const color = LEVELS[s.level].color;
+  $("home").style.setProperty("--ring", color);
+  $("home-sticker").style.setProperty("--ring", color);
+  $("level").textContent = LEVELS[s.level].label;
+  $("message").textContent = s.message;
+  $("tiles").innerHTML = ["water", "food", "litter", "weight"].map(key => {
+    const word = s.tiles[key] || "steady", changed = word !== "steady";
+    return `<div class="tile${changed ? " changed" : ""}">${ICONS[key]}${key[0].toUpperCase() + key.slice(1)}<div class="word">${word}</div></div>`;
+  }).join("");
+
+  const n = preview ? { scene: preview, text: NOW_TEXT[preview] } : await getNow(s.level);
+  $("mascot").dataset.scene = n.scene;
+  $("now-what").textContent = fill(NOW_TITLE[n.scene] || NOW_TITLE.idle);
+  $("now-when").textContent = n.text;
+
+  linkChips($("home-link-chips"), () => { preview = null; renderHome(); });
+  $("activity-chips").innerHTML = ["drink", "eat", "litter", "sleep"].map(k =>
+    `<button class="chip" aria-pressed="${k === preview}" data-act="${k}">${{ drink: "Drinking", eat: "Eating", litter: "Litter", sleep: "Napping" }[k]}</button>`).join("");
+  document.querySelectorAll("[data-act]").forEach(b => b.addEventListener("click", () => {
+    preview = preview === b.dataset.act ? null : b.dataset.act; renderHome(); }));
+}
+
+/* ---------------- Sheets ---------------- */
+let openSheetEl = null, opener = null;
+function openSheet(el, from) {
+  opener = from; openSheetEl = el; el.hidden = false;
+  document.body.classList.add("sheet-open");
+  requestAnimationFrame(() => el.classList.add("open"));
+  el.querySelector("[data-close]").focus();
+}
+function closeSheet() {
+  if (!openSheetEl) return;
+  const el = openSheetEl; openSheetEl = null;
+  el.classList.remove("open"); document.body.classList.remove("sheet-open");
+  setTimeout(() => { el.hidden = true; opener && opener.focus(); }, 280);
+}
+document.querySelectorAll("[data-close]").forEach(b => b.addEventListener("click", closeSheet));
+$("scrim").addEventListener("click", closeSheet);
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeSheet(); });
+
+$("more-btn").addEventListener("click", () => {
+  const d = current.details;
+  $("d-changed").textContent = d.changed;
+  $("d-check").textContent = d.maybe_nothing;
+  $("d-check-wrap").hidden = !d.maybe_nothing;
+  $("d-call").textContent = d.call_if;
+  $("d-vet").textContent = state.owner && state.owner.vet ? `Your vet: ${state.owner.vet}` : "";
+  openSheet($("more-sheet"), $("more-btn"));
+});
+
+// Weekly report: last 7 days vs the cat's usual, described neutrally
+const WEEK = [
+  { key: "water_ml", label: "Water", unit: "ml" }, { key: "food_g", label: "Food", unit: "g" },
+  { key: "litter_visits", label: "Litter visits", unit: "a day" }, { key: "weight_kg", label: "Weight", unit: "kg" },
+];
+function fakeHistory(level) {
+  // Only used offline: 30 days that roughly match the status
+  const base = { water_ml: 210, food_g: 70, litter_visits: 3, weight_kg: 4.2 };
+  return Array.from({ length: 30 }, (_, i) => {
+    const r = () => 1 + (Math.sin(i * 12.9898 + level.length) * 43758.5453 % 1) * 0.06;
+    const row = Object.fromEntries(Object.entries(base).map(([k, v]) => [k, v * r()]));
+    if (level === "vet" && i > 18) row.water_ml *= 1 + (i - 18) * 0.03;
+    if (level === "blip" && i === 29) row.water_ml *= 1.43;
+    if (level === "urgent" && i === 29) row.litter_visits = 20;
+    return row;
+  });
+}
+$("week-btn").addEventListener("click", async () => {
+  let rows;
+  try { rows = await api(`/cats/${state.linkId}/history?days=30`); } catch { rows = fakeHistory(current.level); }
+  const last7 = rows.slice(-7), before = rows.slice(0, -7);
+  let gaps = 0;
+  $("week").innerHTML = WEEK.map(m => {
+    const vals = last7.map(r => r[m.key]);
+    gaps += vals.filter(v => v == null).length;
+    const prev = before.map(r => r[m.key]).filter(v => v != null);
+    const usual = prev.reduce((a, v) => a + v, 0) / (prev.length || 1);
+    const got = vals.filter(v => v != null);
+    const avg = got.reduce((a, v) => a + v, 0) / (got.length || 1);
+    const diff = usual ? (avg - usual) / usual * 100 : 0;
+    const limit = m.key === "weight_kg" ? 2 : 10;
+    const words = Math.abs(diff) < limit ? "About the same as usual"
+      : `About ${Math.abs(diff).toFixed(m.key === "weight_kg" ? 1 : 0)}% ${diff > 0 ? "higher" : "lower"} than usual`;
+    const max = Math.max(usual * 1.8, ...got) || 1;
+    const bars = vals.map((v, i) => {
+      const h = v == null ? 40 : Math.max(3, v / max * 40);
+      return `<rect class="${v == null ? "gap" : ""}" x="${4 + i * 18}" y="${44 - h}" width="13" height="${h}" rx="3"/>`;
+    }).join("");
+    const uy = 44 - usual / max * 40;
+    return `<div class="wk"><span class="t">${m.label}</span><span class="s">${words}</span>
+      <svg viewBox="0 0 132 48" role="img" aria-label="${m.label}: ${words}">${bars}<line x1="0" x2="132" y1="${uy}" y2="${uy}"/></svg></div>`;
+  }).join("");
+  $("week-gaps").textContent = gaps ? `${gaps} reading${gaps === 1 ? "" : "s"} this week were unreliable (e.g. a knocked-over bowl) and were skipped.` : "";
+  openSheet($("week-sheet"), $("week-btn"));
+});
+
+/* ---------------- Edit / reset ---------------- */
+$("edit-cat").addEventListener("click", () => { renderCatForm(); show("cat"); });
+$("reset").addEventListener("click", () => { store.clear(); location.reload(); });
+
+/* ---------------- Start ---------------- */
+(async () => {
+  await loadCats();
+  if (state.step === "cat") renderCatForm();
+  $("owner-name").value = (state.owner || {}).name || "";
+  $("owner-email").value = (state.owner || {}).email || "";
+  $("owner-vet").value = (state.owner || {}).vet || "";
+  checkAccount();
+  document.querySelectorAll('[data-go="account"]').forEach(b => b.addEventListener("click", checkAccount));
+  // Entering the cat screen from anywhere fills the form
+  const _show = show; show = step => { if (step === "cat") renderCatForm(); _show(step); };
+  setCoat(state.cat.coat || COATS[0].fur);
+  show(state.step || "welcome");
+})();
+</script>
+</body>
+</html>
