@@ -272,7 +272,8 @@ body.has-tabs .tabbar { display: grid; }
 .now .what { font-weight: 700; font-size: 21px; line-height: 1.25; margin-top: 4px; }
 .now .when { color: var(--ink); font-weight: 700; font-size: 18px; }
 .earlier { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.earlier li { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 600; }
+.earlier li { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 500; }
+.earlier b { font-weight: 700; }
 .earlier svg { width: 28px; height: 28px; flex: none; }
 .section-title { font-size: 18px; font-weight: 600; margin-bottom: -8px; }
 
@@ -1285,7 +1286,7 @@ async function renderHome() {
   const rec = (preview ? [{ scene: preview, text: "Preview" }] : d.recent);
   const last = rec[0] || { scene: "idle", text: "No activity recorded yet" };
   const TITLE = { idle: "{name} is relaxing", drink: "{name} had a drink", eat: "{name} had a snack",
-                  litter: "{name} used the litter box", sleep: "{name} is napping" };
+                  litter: "{name} used the litter box", sleep: "{name} took a nap" };
 
   el.innerHTML = `
     ${dayBar(cat, d)}
@@ -1295,8 +1296,8 @@ async function renderHome() {
     <p class="section-title">What ${esc(cat.name)} did last</p>
     <div class="now">${mascot(last.scene, fillName(TITLE[last.scene] || TITLE.idle, cat), cat.coat)}
       <p class="what">${esc(fillName(TITLE[last.scene] || TITLE.idle, cat))}</p><p class="when">${esc(last.text)}</p></div>
-    ${rec.length > 1 ? `<ul class="earlier" aria-label="Earlier activity">${rec.slice(1, 4).map(r =>
-      `<li>${ICONS[SCENE_ICON[r.scene]] || ""}<span>${esc(r.text)}</span></li>`).join("")}</ul>` : ""}
+    ${rec.length > 1 ? `<ul class="earlier" aria-label="Latest of each activity">${rec.slice(1, 4).map(r =>
+      `<li>${ICONS[SCENE_ICON[r.scene]] || ""}<span>${r.label ? `${esc(r.label)}: <b>${esc(r.short)}</b>` : `<b>${esc(r.text)}</b>`}</span></li>`).join("")}</ul>` : ""}
     ${notesCard(cat)}`;
   wireNotes(cat, renderHome);
   wireDayBar(el, cat, d, renderHome);
