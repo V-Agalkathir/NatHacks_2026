@@ -1124,7 +1124,7 @@ function countToday(key, amount, kg) {
   const row = dayRow(cat, liveNowMs());                  // the day it really happened (also when catching up)
   if (key === "food") row.food_g += amount;
   if (key === "water") row.water_ml += amount;
-  if (key === "visits") row.litter_visits += 1;
+  if (key === "visits" && ++row.litter_visits === LIVE_URGENT_VISITS && db.ui.tab === "home") setTimeout(renderHome, 0);
   if (kg) row.weight_kg = kg;
   saveLive();
 }
@@ -1645,6 +1645,45 @@ function alertHistory(cat, d) {
 
 /* ---------------- Home ---------------- */
 let preview = null;   // demo: preview a mascot animation
+/* ---------------- Live cats: live view, or the alert ----------------
+   A cat on live scales shows what it's doing right now. When there's an alert to act on,
+   the screen switches to the alert instead (the scales keep listening in the background). */
+const LIVE_URGENT_VISITS = 10;   // same as the engine: this many litter visits in one day is urgent for any cat
+// Urgent pattern seen live today (until the owner says they've checked)
+function liveUrgent(cat) {
+  if (!cat.live) return null;
+  const today = dateKey(Date.now()), row = liveLog(cat).days[today];
+  if (!row || row.litter_visits < LIVE_URGENT_VISITS || cat.liveChecked === today) return null;
+  return row.litter_visits;
+}
+function liveAlertCard(cat, n) {
+  const st = STATUS.red;
+  return `<div class="status red" role="alert">
+      <span class="pill" style="--c:${st.color}">${st.pill}</span>
+      <h3>${esc(fillName(st.head, cat))}</h3>
+      <p>${esc(fillName(st.body, cat))}</p>
+      <div class="noticed"><b>What we noticed</b>${esc(cat.name)} visited the litter box ${n} times today. Most healthy cats only go a few times a day.</div>
+      <p class="foot">${esc(fillName(st.foot, cat))}</p>
+      ${urgentActions(me())}
+      <div class="actions"><button class="btn quiet" id="live-checked">I've checked on ${esc(cat.name)}</button></div>
+      <p class="small-print">Seen live by the scales today.</p>
+    </div>`;
+}
+function wireLiveChecked(el, cat, rerender) {
+  el.querySelector("#live-checked")?.addEventListener("click", () => {
+    cat.liveChecked = dateKey(Date.now()); save(); toast("Thanks. We'll keep watching."); rerender();
+  });
+}
+// An engine alert (vet or urgent) the owner hasn't answered yet
+function alertOpen(cat, d) {
+  if (!RANK[d.status.level]) return false;
+  const eps = episodes(d), ep = eps.length && eps[eps.length - 1].end === d.day ? eps[eps.length - 1] : null;
+  if (!ep) return true;
+  return !responsesIn(cat, ep, d).some(r => r.rank >= RANK[d.status.level] && d.day - r.day < QUIET_DAYS);
+}
+// In alert mode the live card is hidden, but keep counting what the scales see
+function listenQuietly(cat) { liveConnect(cat.live).catch(() => {}); loadLive(cat); }
+
 async function renderHome() {
   const cat = currentCat(); syncDay(cat);
   const d = await catData(cat);
@@ -1660,11 +1699,13 @@ async function renderHome() {
   const TITLE = { idle: "{name} is relaxing", drink: "{name} had a drink", eat: "{name} had a snack",
                   litter: "{name} used the litter box", sleep: "{name} took a nap" };
 
+  const liveN = liveUrgent(cat), alertNow = cat.live && (liveN != null || alertOpen(cat, d));
+  if (alertNow) listenQuietly(cat);
   el.innerHTML = `
     ${dayBar(cat, d)}
     <div class="who">${sticker(cat, "", st.color)}<p class="name">${esc(cat.name)}</p></div>
-    ${cat.live ? liveCard(cat) : ""}
-    ${statusCard(cat, d)}
+    ${cat.live && !alertNow ? liveCard(cat) : ""}
+    ${liveN != null ? liveAlertCard(cat, liveN) : statusCard(cat, d)}
     ${followUpCard(cat, d)}
     ${cat.live ? "" : `<p class="section-title">What ${esc(cat.name)} did last</p>
     <div class="now">${mascot(last.scene, fillName(TITLE[last.scene] || TITLE.idle, cat), cat.coat)}
@@ -1675,6 +1716,7 @@ async function renderHome() {
   wireNotes(cat, renderHome);
   wireDayBar(el, cat, d, renderHome);
   wireResponses(el, cat, d, renderHome);
+  wireLiveChecked(el, cat, renderHome);
   updateLive();
   el.querySelector("[data-action=review]")?.addEventListener("click", () => setTab("dash"));
   el.querySelector("[data-action=share]")?.addEventListener("click", () => shareHistory(cat, d));
@@ -1706,6 +1748,13 @@ function renderLearning(cat, d, el) {
       <p class="small-print">Purrcast is still learning ${esc(cat.name)}'s routine, but this pattern is worrying for any cat.</p>
     </div>`;
   }
+  // Live cat: the live view, unless there's an alert. Alert from the scales: live numbers;
+  // alert from the (simulated) history: that day's numbers, which are what it's about
+  const liveN = liveUrgent(cat), simAlert = d.status.level === "urgent" && !learnAnswered.length;
+  const alertMode = cat.live && (liveN != null || simAlert);
+  const showLive = cat.live && !(simAlert && liveN == null);
+  if (liveN != null) alert = liveAlertCard(cat, liveN);
+  if (alertMode) listenQuietly(cat);
   const cards = [
     { key: "food", scene: "eat", big: val(row.food_g, "g"), lbl: "eaten today" },
     { key: "water", scene: "drink", big: val(row.water_ml, "ml"), lbl: "drunk today" },
@@ -1715,11 +1764,11 @@ function renderLearning(cat, d, el) {
   el.innerHTML = `
     <div class="who">${sticker(cat, "md", alert ? STATUS.red.color : null)}<p class="name">${esc(cat.name)}</p></div>
     ${alert || followUpCard(cat, d)}
-    ${cat.live ? liveCard(cat) : ""}
+    ${cat.live && !alertMode ? liveCard(cat) : ""}
     <div class="center"><h2 style="font-size:24px">Learning ${esc(cat.name)}'s routine</h2>
       <p class="soft">Every cat is different, so Purrcast first learns what's normal for ${esc(cat.name)}.</p></div>
-    <div class="learn-grid">${cards.map(c => `<div class="learn-card">${mascot(c.scene, c.lbl, cat.coat)}<p class="big"${cat.live ? ` data-today="${c.key}"` : ""}>${cat.live ? todayText(cat, c.key) : c.big}</p><p class="lbl">${c.lbl}</p></div>`).join("")}</div>
-    ${cat.live ? `<p class="small-print center">Counted live from the scales since midnight.</p>` : ""}
+    <div class="learn-grid">${cards.map(c => `<div class="learn-card">${mascot(c.scene, c.lbl, cat.coat)}<p class="big"${showLive ? ` data-today="${c.key}"` : ""}>${showLive ? todayText(cat, c.key) : c.big}</p><p class="lbl">${c.lbl}</p></div>`).join("")}</div>
+    ${showLive ? `<p class="small-print center">Counted live from the scales since midnight.</p>` : ""}
     <div>
       <div class="progress" role="progressbar" aria-valuemin="1" aria-valuemax="${BASELINE_DAYS}" aria-valuenow="${cat.day}" aria-label="Learning progress"><div style="width:${pct}%"></div></div>
       <p class="soft center" style="margin-top:8px">Day ${cat.day} of ${BASELINE_DAYS} · first summary in ${left} day${left === 1 ? "" : "s"}</p>
@@ -1731,6 +1780,7 @@ function renderLearning(cat, d, el) {
       <p>Simulated data from ${esc(simLabel(d.sim))}. Change it in Profile.</p></div>`;
   wireNotes(cat, renderHome);
   wireResponses(el, cat, d, renderHome);
+  wireLiveChecked(el, cat, renderHome);
   updateLive();
   // After day 14 the demo jumps to the end of the simulated data (day 60)
   $("next-day").addEventListener("click", () => { cat.day = cat.day + 1; save(); renderHome(); });
