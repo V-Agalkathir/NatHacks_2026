@@ -14,6 +14,8 @@ CAT_METADATA = {
     "coco": {"name": "Coco", "age": 8, "sex": "female"},
     "nala": {"name": "Nala", "age": 6, "sex": "female"},
     "pip": {"name": "Pip", "age": 0.5, "sex": "male"},
+    "ziggy": {"name": "Ziggy", "age": 14, "sex": "female"},
+    "simba": {"name": "Simba", "age": 4, "sex": "male"},
 }
 
 CAT_BASELINES = {
@@ -97,5 +99,23 @@ CAT_BASELINES = {
         "litter_output_g_day": 80,
         "weight_kg": 2.0,
         "bed_min_day": 960,
+    },
+    "ziggy": {
+        "water_ml_day": 440,        # 3.6 kg senior, ALREADY drinking a lot (~120 ml/kg/day)
+        "food_g_day": 66,           # when monitoring starts: the baseline itself is high
+        "litter_visits_day": 5,
+        "litter_avg_sec": 50,
+        "litter_output_g_day": 230,
+        "weight_kg": 3.6,
+        "bed_min_day": 840,
+    },
+    "simba": {
+        "water_ml_day": 230,        # 5.0 kg adult; urgent litter day during the learning week
+        "food_g_day": 75,
+        "litter_visits_day": 3,
+        "litter_avg_sec": 45,
+        "litter_output_g_day": 135,
+        "weight_kg": 5.0,
+        "bed_min_day": 780,
     },
 }

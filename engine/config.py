@@ -69,6 +69,14 @@ SENIOR_TREND_FACTOR = _float("SENIOR_TREND_FACTOR", 0.75)  # seniors: trends fla
 WEIGHT_DROP_PCT = _float("WEIGHT_DROP_PCT", 5)    # weight this % under normal = worth a vet visit
 SENIOR_WEIGHT_DROP_PCT = _float("SENIOR_WEIGHT_DROP_PCT", 4)
 
+# ---------- Typical healthy-cat ranges (engine/reference.py) ----------
+# Used on days 1-14 (no baseline yet) and to check whether the learned "usual"
+# is already abnormal (cat was sick before monitoring started).
+URGENT_VISITS_ANY_CAT = _float("URGENT_VISITS_ANY_CAT", 10)   # litter visits in one day: urgent for any cat
+TYPICAL_VISITS_MAX = _float("TYPICAL_VISITS_MAX", 7)          # healthy: ~2-4 pees + ~1 poop a day
+NOT_EATING_G = _float("NOT_EATING_G", 5)                      # under this per day = ate almost nothing
+TYPICAL_WATER_ML_PER_KG = _float("TYPICAL_WATER_ML_PER_KG", 100)  # above this per kg per day = high
+
 # Litter visits averaging this % above normal for a week = worth a vet visit
 VISITS_UP_PCT = _float("VISITS_UP_PCT", 30)
 

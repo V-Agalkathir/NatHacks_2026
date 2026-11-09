@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Purrcast</title>
 <meta name="description" content="Purrcast: one simple update when your cat's habits change.">
-<meta name="theme-color" content="#E3F2EF">
+<meta name="theme-color" content="#F5FFC6">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-180.png">
@@ -18,7 +18,8 @@
 <style>
 /* ===================== Design tokens ===================== */
 :root {
-  --bowl: #E3F2EF;      /* page background: pale mint, like a water bowl */
+  --page: #F5FFC6;      /* page background: soft lemon */
+  --bowl: #E3F2EF;      /* animation stages: pale mint, like a water bowl */
   --paper: #FFFFFF;     /* cards and stickers */
   --ink: #2E2140;       /* outlines and text: deep plum */
   --ink-soft: #6B5C80;  /* secondary text */
@@ -49,14 +50,12 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; }
 body {
-  background: var(--bowl);
+  background: var(--page);
   color: var(--ink);
   font-family: var(--font);
   font-size: 17px;
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
-  background-image: radial-gradient(rgba(46,33,64,.07) 2px, transparent 2.5px);
-  background-size: 26px 26px;
 }
 .app { max-width: 420px; min-height: 100dvh; margin: 0 auto; padding: calc(20px + env(safe-area-inset-top)) 16px calc(32px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; }
 body.has-tabs .app { padding-bottom: calc(var(--tabbar) + 28px + env(safe-area-inset-bottom)); }
@@ -124,6 +123,12 @@ label.field, .field { display: flex; flex-direction: column; gap: 6px; font-weig
   background: var(--paper); border: var(--line) solid var(--ink); box-shadow: var(--pop-sm); cursor: pointer;
 }
 .stepper output { font-size: 19px; font-weight: 600; flex: 1; text-align: center; white-space: nowrap; }
+.stepper .num {
+  width: 100%; min-width: 0; flex: 1; text-align: right; font: 600 19px var(--font); color: var(--ink);
+  background: var(--paper); border: 2.5px solid var(--ink); border-radius: 12px; padding: 6px 4px; -moz-appearance: textfield;
+}
+.stepper .num::-webkit-inner-spin-button, .stepper .num::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.stepper .unit { font-weight: 600; margin-left: -4px; }
 
 .swatches { display: flex; gap: 10px; flex-wrap: wrap; }
 .swatch {
@@ -297,6 +302,18 @@ body.has-tabs .tabbar { display: grid; }
 .detail h3 { font-size: 17px; margin-bottom: 4px; }
 .detail + .detail { margin-top: 12px; }
 
+/* ===================== Owner notes ===================== */
+.notes { display: flex; flex-direction: column; gap: 10px; }
+.notes textarea { font: 500 17px var(--font); resize: vertical; min-height: 72px; }
+.notes .chip[aria-pressed="true"] { background: var(--nose); }
+.note-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.note-list li { border-top: 2px dashed rgba(46,33,64,.2); padding-top: 10px; display: flex; gap: 8px; align-items: flex-start; }
+.note-list li:first-child { border-top: 0; padding-top: 0; }
+.note-list .n-body { flex: 1; }
+.note-list .n-date { font-size: 14px; color: var(--ink-soft); }
+.note-list .n-tags { font-weight: 600; }
+.note-list .link-btn { padding: 2px 4px; font-size: 14px; }
+
 /* ===================== Profile ===================== */
 .list { display: flex; flex-direction: column; gap: 12px; }
 .cat-row { display: flex; align-items: center; gap: 12px; }
@@ -336,6 +353,7 @@ body.has-tabs .tabbar { display: grid; }
 .mascot[data-scene=sleep] .zz text:nth-child(3) { animation-delay: 2s; }
 .mascot[data-scene=litter] :is(.box, .sand) { display: inline; }
 .mascot[data-scene=litter] .head { animation: look 1.6s ease-in-out infinite; }
+.mascot[data-scene=litter] .cat { transform: translateY(-21px); }   /* paws rest on top of the sand */
 .mascot[data-scene=litter] .sand > * { animation: hop .7s ease-out infinite; }
 .mascot[data-scene=litter] .sand > :nth-child(2) { animation-delay: .25s; }
 .mascot[data-scene=litter] .sand > :nth-child(3) { animation-delay: .5s; }
@@ -435,7 +453,8 @@ body.has-tabs .tabbar { display: grid; }
       <div class="field"><span id="weight-label">Weight</span>
         <div class="stepper" role="group" aria-labelledby="weight-label">
           <button type="button" data-step="weight" data-d="-1" aria-label="Lighter">–</button>
-          <output id="cat-weight"></output>
+          <input class="num" id="cat-weight" type="number" inputmode="decimal" step="0.1" min="1" aria-label="Weight">
+          <span class="unit" id="cat-weight-unit">lb</span>
           <button type="button" data-step="weight" data-d="1" aria-label="Heavier">+</button>
         </div>
       </div>
@@ -555,7 +574,9 @@ const EARS = `<svg class="ears" viewBox="0 0 200 80" aria-hidden="true">
   <path class="ear" d="M178 78 L162 8 L108 60 Z"/><path d="M160 62 L154 30 L128 56 Z" fill="#FF8FAB"/></svg>`;
 
 const MASCOT = `
-  <g class="box"><path class="m-outline" d="M22 96 H138 V126 H22 Z" fill="#FFD66B"/></g>
+  <g class="box"><path class="m-outline" d="M18 104 H142 L136 127 H24 Z" fill="#FFD66B"/>
+    <path d="M24 106 Q50 98 80 103 Q110 98 136 106" fill="#F3E6C8" stroke="#2E2140" stroke-width="3"/></g>
+  <g class="cat">
   <g class="tail"><path d="M108 112 Q140 108 136 74 Q134 62 142 56" fill="none" stroke="#2E2140" stroke-width="10" stroke-linecap="round"/>
     <path d="M108 112 Q140 108 136 74 Q134 62 142 56" fill="none" style="stroke:var(--fur)" stroke-width="5" stroke-linecap="round"/></g>
   <g class="body-g">
@@ -577,19 +598,19 @@ const MASCOT = `
     <path d="M80 69 Q77 73 73 71 M80 69 Q83 73 87 71" stroke="#2E2140" stroke-width="2.5" fill="none" stroke-linecap="round"/>
     <circle cx="63" cy="67" r="4" fill="#FF8FAB" opacity=".5"/><circle cx="97" cy="67" r="4" fill="#FF8FAB" opacity=".5"/>
   </g>
+  </g>
   <g class="bowl"><path class="m-outline" d="M50 108 H110 L104 128 H56 Z" fill="#8EC9FF"/></g>
   <g class="water"><ellipse cx="80" cy="108" rx="28" ry="4" fill="#CFE8FF" stroke="#2E2140" stroke-width="2.5"/>
     <ellipse class="ripple" cx="80" cy="108" rx="12" ry="2" fill="none" stroke="#fff" stroke-width="2"/></g>
   <g class="kibble bits"><circle cx="70" cy="104" r="3.5" fill="#C98B4E" stroke="#2E2140" stroke-width="2"/>
     <circle cx="82" cy="102" r="3.5" fill="#C98B4E" stroke="#2E2140" stroke-width="2"/>
     <circle cx="92" cy="104" r="3.5" fill="#C98B4E" stroke="#2E2140" stroke-width="2"/></g>
-  <g class="box"><path class="m-outline" d="M22 112 H138 V126 H22 Z" fill="#FFD66B"/>
-    <path d="M26 112 Q50 104 80 110 Q110 104 134 112" fill="#F3E6C8" stroke="#2E2140" stroke-width="3"/></g>
-  <g class="sand bits"><circle cx="40" cy="104" r="2.5" fill="#E6D3A8"/><circle cx="120" cy="102" r="2.5" fill="#E6D3A8"/><circle cx="50" cy="100" r="2" fill="#E6D3A8"/></g>
+  <g class="sand bits"><circle cx="40" cy="98" r="2.5" fill="#E6D3A8" stroke="#2E2140" stroke-width="1"/><circle cx="122" cy="96" r="2.5" fill="#E6D3A8" stroke="#2E2140" stroke-width="1"/><circle cx="52" cy="94" r="2" fill="#E6D3A8" stroke="#2E2140" stroke-width="1"/></g>
   <g class="zz" font-family="Fredoka, sans-serif" font-weight="700" fill="#2E2140">
     <text x="108" y="38" font-size="14">z</text><text x="118" y="28" font-size="17">z</text><text x="130" y="18" font-size="20">Z</text></g>`;
-const mascot = (scene, label) =>
-  `<div class="stage"><svg class="mascot" data-scene="${scene}" viewBox="0 0 160 130" role="img" aria-label="${esc(label)}">${MASCOT}</svg></div>`;
+// coat = the cat's chosen colour, so the cartoon matches the profile
+const mascot = (scene, label, coat) =>
+  `<div class="stage" style="${coatVars(coat)}"><svg class="mascot" data-scene="${scene}" viewBox="0 0 160 130" role="img" aria-label="${esc(label)}">${MASCOT}</svg></div>`;
 
 const ICONS = {
   water: `<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M20 5 C26 14 31 20 31 26 a11 11 0 0 1 -22 0 C9 20 14 14 20 5Z" fill="#8EC9FF" stroke="#2E2140" stroke-width="3" stroke-linejoin="round"/><path d="M15 27 a5 5 0 0 0 5 5" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"/></svg>`,
@@ -655,6 +676,7 @@ function sticker(cat, size = "", ring = null) {
 const units = () => (me() && me().units) || "lb";
 const fmtWeight = kg => kg == null || isNaN(kg) ? "—"
   : units() === "lb" ? `${(kg * LB_PER_KG).toFixed(1)} lb` : `${kg.toFixed(1)} kg`;
+const weightNumber = kg => Math.round((units() === "lb" ? kg * LB_PER_KG : kg) * 10) / 10;
 // Ages: 2–11 months for kittens, then whole years
 const AGE_STEPS = [...Array.from({ length: 10 }, (_, i) => (i + 2) / 12), ...Array.from({ length: 25 }, (_, i) => i + 1)];
 const fmtAge = a => a < 1 ? `${Math.round(a * 12)} months` : `${Math.round(a)} yr${Math.round(a) === 1 ? "" : "s"}`;
@@ -691,6 +713,7 @@ const HINTS = {
   healthy: "steady", blip: "one odd day", slow_drinking: "drinking + litter visits up", litter_emergency: "urgent litter pattern",
   diabetes: "drinking, eating + visits up", hyperthyroid: "eating more, losing weight", dental: "eating less",
   not_eating: "stopped eating", growing: "growing kitten", weight_loss: "losing weight",
+  sick_from_start: "already drinking a lot", early_blockage: "urgent on learning day 5",
 };
 const FALLBACK_SIMS = [
   { cat_id: "mochi", name: "Mochi", level: "good", sex: "male", scenario: "healthy" },
@@ -847,7 +870,9 @@ function renderCatForm() {
   $("photo-hint").textContent = d.photo ? "Change photo" : "Add photo";
   $("photo-remove").hidden = !d.photo;
   $("cat-age").textContent = fmtAge(d.age);
-  $("cat-weight").textContent = fmtWeight(d.weightKg);
+  // Don't overwrite the box while the owner is typing in it
+  if (document.activeElement !== $("cat-weight")) $("cat-weight").value = weightNumber(d.weightKg);
+  $("cat-weight-unit").textContent = units();
   $("age-hint").textContent = d.age < 1
     ? "Kittens eat and drink more as they grow, so Purrcast won't flag that on its own."
     : d.age >= 10 ? "Senior cats: Purrcast flags gradual changes a little earlier." : "";
@@ -871,6 +896,11 @@ function updateCatBtn() {
 // Text fields write straight into the draft
 $("cat-name").addEventListener("input", e => { draft.name = e.target.value; updateCatBtn(); });
 $("cat-conditions").addEventListener("input", e => draft.conditions = e.target.value);
+$("cat-weight").addEventListener("input", e => {
+  const v = parseFloat(e.target.value);
+  if (!isNaN(v) && v > 0) draft.weightKg = Math.min(15, Math.max(0.5, units() === "lb" ? v / LB_PER_KG : v));
+});
+$("cat-weight").addEventListener("blur", e => e.target.value = weightNumber(draft.weightKg));
 document.querySelectorAll("input[name=sex]").forEach(r => r.addEventListener("change", () => draft.sex = r.value));
 // Steppers only change their own number
 document.querySelectorAll("[data-step]").forEach(b => b.addEventListener("click", () => {
@@ -879,8 +909,10 @@ document.querySelectorAll("[data-step]").forEach(b => b.addEventListener("click"
     let i = AGE_STEPS.findIndex(a => a >= draft.age - 1e-6); if (i < 0) i = AGE_STEPS.length - 1;
     draft.age = AGE_STEPS[Math.min(AGE_STEPS.length - 1, Math.max(0, i + dir))];
   } else {
-    const step = units() === "lb" ? 0.5 / LB_PER_KG : 0.1;   // 0.5 lb or 0.1 kg
-    draft.weightKg = Math.min(15, Math.max(0.5, draft.weightKg + dir * step));
+    // 0.1 lb or 0.1 kg per tap; or type the exact weight in the box
+    const shown = Math.round((weightNumber(draft.weightKg) + dir * 0.1) * 10) / 10;
+    draft.weightKg = Math.min(15, Math.max(0.5, units() === "lb" ? shown / LB_PER_KG : shown));
+    $("cat-weight").value = weightNumber(draft.weightKg);
   }
   renderCatForm();
 }));
@@ -1029,6 +1061,56 @@ $("topbar").addEventListener("click", e => {
 
 const learning = cat => cat.day <= BASELINE_DAYS;
 
+/* ---------------- Owner notes ---------------- */
+// The owner writes down what they noticed. Saved per cat, listed on the Dashboard,
+// and included in the summary shared with the vet.
+const NOTE_TAGS = ["Vomited", "Hiding more", "Less playful", "Drinking more", "Peeing outside the box", "Eating less", "Coughing or sneezing"];
+let noteTags = [];
+const fmtDate = iso => new Date(iso).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+const noteText = n => [n.tags.join(", "), n.text].filter(Boolean).join(": ");
+
+function notesCard(cat) {
+  const last = (cat.notes || [])[0];
+  return `<div class="card notes" id="notes-card">
+    <h3>Your notes</h3>
+    <p class="soft">Noticed anything about ${esc(cat.name)} yourself? Add it here; it's saved to the Dashboard and shared with your vet.</p>
+    <div class="chips" id="note-tags">${NOTE_TAGS.map(t => `<button type="button" class="chip" aria-pressed="${noteTags.includes(t)}" data-tag="${esc(t)}">${esc(t)}</button>`).join("")}</div>
+    <textarea class="input" id="note-text" maxlength="400" placeholder="e.g. Seemed tired after dinner, slept in the closet" aria-label="Your note"></textarea>
+    <button class="btn small" id="note-save" style="align-self:flex-start">Save note</button>
+    ${last ? `<p class="small-print">Last note (${fmtDate(last.date)}): ${esc(noteText(last))}</p>` : ""}
+    <p class="small-print">If something seems serious, contact your vet right away. Don't wait for Purrcast.</p>
+  </div>`;
+}
+function wireNotes(cat, after) {
+  $("note-tags").addEventListener("click", e => {
+    const b = e.target.closest("[data-tag]"); if (!b) return;
+    const t = b.dataset.tag;
+    noteTags = noteTags.includes(t) ? noteTags.filter(x => x !== t) : [...noteTags, t];
+    b.setAttribute("aria-pressed", noteTags.includes(t));
+  });
+  $("note-save").addEventListener("click", () => {
+    const text = $("note-text").value.trim();
+    if (!text && !noteTags.length) { toast("Pick a tag or write a note first"); return; }
+    cat.notes = [{ id: newId(), date: new Date().toISOString(), tags: noteTags, text }, ...(cat.notes || [])];
+    noteTags = []; save(); toast("Note saved to the Dashboard");
+    after();
+  });
+}
+function notesList(cat) {
+  const notes = cat.notes || [];
+  return `<div class="card"><h3>Your notes</h3>
+    ${notes.length ? `<ul class="note-list">${notes.map(n => `<li><div class="n-body">
+        <p class="n-date">${fmtDate(n.date)}</p>
+        ${n.tags.length ? `<p class="n-tags">${esc(n.tags.join(", "))}</p>` : ""}${n.text ? `<p>${esc(n.text)}</p>` : ""}</div>
+        <button class="link-btn" data-del-note="${n.id}" aria-label="Delete note from ${fmtDate(n.date)}">Delete</button></li>`).join("")}</ul>`
+      : `<p class="soft">No notes yet. Add one on the Home tab when you notice something.</p>`}</div>`;
+}
+
+function urgentActions(acct) {
+  const call = acct.vetPhone ? `<a class="btn danger" href="tel:${esc(acct.vetPhone.replace(/[^\d+]/g, ""))}">Call ${esc(acct.vet || "your vet")}</a>` : "";
+  return `<div class="actions">${call}<a class="btn ${call ? "quiet" : "danger"}" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=emergency+vet+near+me">Find an emergency vet</a></div>`;
+}
+
 /* ---------------- Home ---------------- */
 let preview = null;   // demo: preview a mascot animation
 async function renderHome() {
@@ -1046,8 +1128,7 @@ async function renderHome() {
   const acct = me();
   let actions = "";
   if (colour === "red") {
-    const call = acct.vetPhone ? `<a class="btn danger" href="tel:${esc(acct.vetPhone.replace(/[^\d+]/g, ""))}">Call ${esc(acct.vet || "your vet")}</a>` : "";
-    actions = `<div class="actions">${call}<a class="btn ${call ? "quiet" : "danger"}" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=emergency+vet+near+me">Find an emergency vet</a></div>`;
+    actions = urgentActions(acct);
   } else if (colour === "yellow") {
     actions = `<div class="actions"><button class="btn quiet" data-action="review">Review the changes</button><button class="btn" data-action="share">Share history with your vet</button></div>`;
   }
@@ -1070,11 +1151,13 @@ async function renderHome() {
     </div>
     ${ageNote}
     <p class="section-title">What ${esc(cat.name)} did last</p>
-    <div class="now">${mascot(last.scene, fillName(TITLE[last.scene] || TITLE.idle, cat))}
+    <div class="now">${mascot(last.scene, fillName(TITLE[last.scene] || TITLE.idle, cat), cat.coat)}
       <div><p class="what">${esc(fillName(TITLE[last.scene] || TITLE.idle, cat))}</p><p class="when">${esc(last.text)}</p></div></div>
     ${rec.length > 1 ? `<ul class="earlier" aria-label="Earlier activity">${rec.slice(1, 4).map(r =>
       `<li>${ICONS[SCENE_ICON[r.scene]] || ""}<span>${esc(r.text)}</span></li>`).join("")}</ul>` : ""}
+    ${notesCard(cat)}
     <p class="small-print">Demo: showing simulated data from ${esc(simLabel(d.sim))}. Change it in Profile.</p>`;
+  wireNotes(cat, renderHome);
   el.querySelector("[data-action=review]")?.addEventListener("click", () => setTab("dash"));
   el.querySelector("[data-action=share]")?.addEventListener("click", () => shareHistory(cat, d));
 }
@@ -1086,6 +1169,21 @@ function renderLearning(cat, d, el) {
   const val = (v, unit) => v == null ? "—" : `${Math.round(v)} ${unit}`;
   const visits = row.litter_visits == null ? "—" : `${Math.round(row.litter_visits)} visit${row.litter_visits === 1 ? "" : "s"}`;
   const pct = Math.round(cat.day / BASELINE_DAYS * 100), left = BASELINE_DAYS - cat.day;
+  // Urgent patterns are checked from day 1 against typical ranges for any cat
+  const early = (SNAP && SNAP.early && SNAP.early[d.sim.cat_id] || [])[cat.day - 1];
+  let alert = "";
+  if (early && early.level === "urgent") {
+    const st = STATUS.red, msg = personalise(early.message, cat, d).split(" This pattern")[0];
+    alert = `<div class="status red" role="alert">
+      <span class="pill" style="--c:${st.color}">${st.pill}</span>
+      <h3>${esc(fillName(st.head, cat))}</h3>
+      <p>${esc(st.body)}</p>
+      <div class="noticed"><b>What we noticed</b>${esc(msg)}</div>
+      <p class="foot">${esc(st.foot)}</p>
+      ${urgentActions(me())}
+      <p class="small-print">Purrcast is still learning ${esc(cat.name)}'s routine, but this pattern is worrying for any cat.</p>
+    </div>`;
+  }
   const cards = [
     { scene: "eat", big: val(row.food_g, "g"), lbl: "eaten today" },
     { scene: "drink", big: val(row.water_ml, "ml"), lbl: "drunk today" },
@@ -1093,18 +1191,21 @@ function renderLearning(cat, d, el) {
     { scene: "sleep", big: fmtWeight(row.weight_kg == null ? null : row.weight_kg * k), lbl: "weight (on the bed)" },
   ];
   el.innerHTML = `
-    <div class="who">${sticker(cat, "md")}<p class="name">${esc(cat.name)}</p></div>
+    <div class="who">${sticker(cat, "md", alert ? STATUS.red.color : null)}<p class="name">${esc(cat.name)}</p></div>
+    ${alert}
     <div class="center"><h2 style="font-size:24px">Learning ${esc(cat.name)}'s routine</h2>
       <p class="soft">Every cat is different, so Purrcast first learns what's normal for ${esc(cat.name)}.</p></div>
-    <div class="learn-grid">${cards.map(c => `<div class="learn-card">${mascot(c.scene, c.lbl)}<p class="big">${c.big}</p><p class="lbl">${c.lbl}</p></div>`).join("")}</div>
+    <div class="learn-grid">${cards.map(c => `<div class="learn-card">${mascot(c.scene, c.lbl, cat.coat)}<p class="big">${c.big}</p><p class="lbl">${c.lbl}</p></div>`).join("")}</div>
     <div>
       <div class="progress" role="progressbar" aria-valuemin="1" aria-valuemax="${BASELINE_DAYS}" aria-valuenow="${cat.day}" aria-label="Learning progress"><div style="width:${pct}%"></div></div>
       <p class="soft center" style="margin-top:8px">Day ${cat.day} of ${BASELINE_DAYS} · first summary in ${left} day${left === 1 ? "" : "s"}</p>
-      <p class="small-print center">Urgent alerts are on from day 1.</p>
+      <p class="small-print center">Urgent alerts are on from day 1: lots of litter visits, none at all, or not eating.</p>
     </div>
+    ${notesCard(cat)}
     <div class="demo-note"><p>Demo controls</p>
       <div class="row"><button class="btn quiet small" id="next-day">Next day</button><button class="btn small" id="skip-day">Skip to day 60</button></div>
       <p>Simulated data from ${esc(simLabel(d.sim))}. Change it in Profile.</p></div>`;
+  wireNotes(cat, renderHome);
   // After day 14 the demo jumps to the end of the simulated data (day 60)
   $("next-day").addEventListener("click", () => { cat.day = cat.day >= BASELINE_DAYS ? 60 : cat.day + 1; save(); renderHome(); });
   $("skip-day").addEventListener("click", () => { cat.day = 60; save(); renderHome(); });
@@ -1175,8 +1276,13 @@ async function renderDash() {
     <p class="legend"><span><i></i>each day</span>${learning(cat) ? "" : `<span><s></s>${esc(cat.name)}'s usual</span>`}<span><i style="background:none;border-style:dashed"></i>no reliable reading</span></p>
     ${cards}
     ${gaps ? `<p class="small-print">${gaps} day${gaps === 1 ? "" : "s"} had unreliable readings (e.g. a knocked-over bowl) and ${gaps === 1 ? "was" : "were"} skipped.</p>` : ""}
+    ${notesList(cat)}
     ${details}`;
   $("dash-share")?.addEventListener("click", () => shareHistory(cat, d));
+  el.querySelectorAll("[data-del-note]").forEach(b => b.addEventListener("click", () => {
+    if (!b.dataset.armed) { b.dataset.armed = "1"; b.textContent = "Tap to delete"; return; }
+    cat.notes = (cat.notes || []).filter(n => n.id !== b.dataset.delNote); save(); renderDash();
+  }));
 }
 
 // A plain-text summary the owner can text or email to the vet
@@ -1195,6 +1301,9 @@ async function shareHistory(cat, d) {
     line("Litter box visits", "litter_visits", v => v == null ? "—" : `${round(v, 1)}`),
     `- Weight: ${fmtWeight(avg(last7, "weight_kg") * k)} this week (usual ${fmtWeight(avg(base, "weight_kg") * k)})`,
     cat.conditions ? `Known conditions: ${cat.conditions}` : "",
+    ...((cat.notes || []).filter(n => Date.now() - new Date(n.date) < 30 * 864e5).length
+      ? ["", "Owner's notes (last 30 days):", ...(cat.notes || []).filter(n => Date.now() - new Date(n.date) < 30 * 864e5)
+          .map(n => `- ${fmtDate(n.date)}: ${noteText(n)}`)] : []),
     "",
     "Purrcast tracks changes in habits; it is not a diagnosis.",
   ].filter(x => x !== "").join("\n");
