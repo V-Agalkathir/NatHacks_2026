@@ -8,7 +8,7 @@
 
 No download or sign-up with us needed. It runs in your phone's browser.
 
-### 1. Open the app
+### Open the app
 
 | What you want to see | Link |
 |---|---|
@@ -22,7 +22,10 @@ No download or sign-up with us needed. It runs in your phone's browser.
 
 Everything you enter stays on your phone only.
 
-### 2. Walk through the full app
+## Slide Deck
+https://www.canva.com/design/DAHaX07U28o/g6E19qp-4DcNh7_2fZlP1A/edit
+
+### Walk through the full app
 
 1. Tap **Create account**. Any name, email and password works (it's only saved on your phone).
 2. **Add a cat:** name, age, weight, and an optional photo. The cartoon cat takes the colour of the photo.
@@ -44,7 +47,7 @@ Everything you enter stays on your phone only.
 | **Oscar** | suddenly uses the litter box 20 times a day | Urgent: contact a vet now |
 | **Simba** | urgent problem while the app is still learning (day 5) | Urgent alerts work from day 1 |
 
-### 3. The live hardware demo
+### The live hardware demo
 
 The second link connects to our **simulated ESP32 and 4 scales** running in [Wokwi](https://wokwi.com) (an online electronics simulator). Our team runs it during the demo.
 
@@ -360,9 +363,6 @@ Stop anything with `Ctrl + C`.
 ## References
 
 Cornell Feline Health Center. (2017, October 16). *Chronic kidney disease*. Cornell University College of Veterinary Medicine. [https://www.vet.cornell.edu/departments-centers-and-institutes/cornell-feline-health-center/health-information/feline-health-topics/chronic-kidney-disease](https://www.vet.cornell.edu/departments-centers-and-institutes/cornell-feline-health-center/health-information/feline-health-topics/chronic-kidney-disease)
-
-## Slide Deck
-https://www.canva.com/design/DAHaX07U28o/g6E19qp-4DcNh7_2fZlP1A/edit
 
 
 ## Acknowledgements
