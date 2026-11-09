@@ -1066,6 +1066,7 @@ $("pair-btn").addEventListener("click", async () => {
   // Save the cat (new cats are added here, once their scales are paired)
   const list = me().cats, i = list.findIndex(c => c.id === pairing.id);
   pairing.day = pairing.day || 1;
+  if (pairing.live && !pairing.startedAt) { pairing.startedAt = Date.now(); pairing.realDay = 1; }
   if (i < 0) list.push(pairing); else list[i] = pairing;
   db.ui.catId = pairing.id; save();
   openMain("home");
@@ -1092,25 +1093,74 @@ const LIVE_DEVICES = [
 ];
 const CAT_ON_G = 1500;      // a jump this big on the litter box or bed = the cat is on it
 const SEGMENT_END_MS = 2500; // no reading for this long = the burst is over
-const live = { code: null, client: null, online: false, offline: false, lastMsg: 0, lastT: 0, dev: {}, events: [], today: newToday(), scene: null, boot: null };
+const live = { code: null, client: null, online: false, offline: false, lastMsg: 0, lastT: 0, dev: {}, events: [], scene: null, boot: null };
 
 // Forget everything seen so far (the simulation restarted, or the owner tapped Reset)
-// What the live scales measured since connecting (shown on the learning screen)
-function newToday() { return { food: 0, water: 0, visits: 0, kg: null, any: false }; }
-function countToday(key, amount, kg) {
-  const t = live.today;
-  if (key === "food" || key === "water") t[key] += amount;
-  if (key === "visits") t.visits += 1;
-  if (kg) t.kg = kg;
-  t.any = true;
+// Live data is saved with the cat (daily totals, recent activity), so closing the app keeps it.
+// cat.liveLog = { boot, lastT, events: [...], days: { "2026-11-09": { food_g, water_ml, litter_visits, weight_kg } } }
+const dateKey = ms => { const d = new Date(ms);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+const liveLog = cat => cat.liveLog || (cat.liveLog = { boot: null, lastT: 0, events: [], days: {} });
+let liveCatId = null;                                    // the cat whose live data is loaded
+const liveCat = () => liveCatId && cats().find(c => c.id === liveCatId);
+function loadLive(cat) {
+  if (liveCatId === cat.id) return;
+  liveCatId = cat.id;
+  const L = liveLog(cat);
+  Object.assign(live, { events: L.events || [], lastT: L.lastT || 0, boot: L.boot || null, dev: {}, scene: null });
 }
-const todayText = key => { const t = live.today;
-  return key === "food" ? `${Math.round(t.food)} g` : key === "water" ? `${Math.round(t.water)} ml`
-       : key === "visits" ? `${t.visits} visit${t.visits === 1 ? "" : "s"}` : fmtWeight(t.kg); };
+function saveLive() {
+  const cat = liveCat(); if (!cat) return;
+  Object.assign(liveLog(cat), { events: live.events, lastT: live.lastT, boot: live.boot });
+  save();
+}
+// One day's live totals (created empty on first use)
+function dayRow(cat, ms) {
+  const D = liveLog(cat).days, k = dateKey(ms);
+  return D[k] || (D[k] = { food_g: 0, water_ml: 0, litter_visits: 0, weight_kg: null });
+}
+function countToday(key, amount, kg) {
+  const cat = liveCat(); if (!cat) return;
+  const row = dayRow(cat, liveNowMs());                  // the day it really happened (also when catching up)
+  if (key === "food") row.food_g += amount;
+  if (key === "water") row.water_ml += amount;
+  if (key === "visits") row.litter_visits += 1;
+  if (kg) row.weight_kg = kg;
+  saveLive();
+}
+const todayText = (cat, key) => { const t = liveLog(cat).days[dateKey(Date.now())] || {};
+  return key === "food" ? `${Math.round(t.food_g || 0)} g` : key === "water" ? `${Math.round(t.water_ml || 0)} ml`
+       : key === "visits" ? `${t.litter_visits || 0} visit${t.litter_visits === 1 ? "" : "s"}` : fmtWeight(t.weight_kg ?? null); };
+// Live cats: one row per calendar day since the scales were paired (for the Dashboard)
+function liveDays(cat) {
+  const out = [], D = liveLog(cat).days, d = new Date(cat.startedAt || Date.now()), end = new Date();
+  d.setHours(0, 0, 0, 0);
+  for (; d <= end; d.setDate(d.getDate() + 1))
+    out.push(D[dateKey(d)] || { food_g: null, water_ml: null, litter_visits: null, weight_kg: null });
+  return out;
+}
+// Live cats: the learning days follow the calendar (a new day starts at midnight)
+function syncDay(cat) {
+  if (!cat || !cat.live) return;
+  if (!cat.startedAt) cat.startedAt = Date.now();
+  const a = new Date(cat.startedAt), b = new Date();
+  a.setHours(0, 0, 0, 0); b.setHours(0, 0, 0, 0);
+  const real = Math.round((b - a) / 86400000) + 1;
+  if (cat.realDay == null) cat.realDay = real;
+  if (real > cat.realDay) { cat.day = (cat.day || 1) + real - cat.realDay; cat.realDay = real; }
+  save();
+}
+setInterval(() => {                                      // past midnight with the app open: move to the next day
+  const c = currentCat(); if (!c || !c.live) return;
+  const before = c.day; syncDay(c);
+  if (c.day !== before && db.ui && db.ui.tab === "home") renderHome();
+}, 60000);
 
 function resetLive() {
   Object.values(live.dev).forEach(d => clearTimeout(d.timer));
-  Object.assign(live, { dev: {}, events: [], today: newToday(), scene: null, lastMsg: live.lastMsg, lastT: 0 });
+  Object.assign(live, { dev: {}, events: [], scene: null, lastMsg: live.lastMsg, lastT: 0 });
+  const cat = liveCat(); if (cat) liveLog(cat).days = {};
+  saveLive();
   updateLive();
 }
 
@@ -1133,7 +1183,8 @@ function loadMqtt() {
 function liveDisconnect() {
   if (live.client) { try { live.client.end(true); } catch {} }
   Object.values(live.dev).forEach(d => clearTimeout(d.timer));
-  Object.assign(live, { code: null, client: null, online: false, offline: false, lastMsg: 0, lastT: 0, dev: {}, events: [], today: newToday(), scene: null, boot: null });
+  Object.assign(live, { code: null, client: null, online: false, offline: false, lastMsg: 0, lastT: 0, dev: {}, events: [], scene: null, boot: null });
+  liveCatId = null;
 }
 
 async function liveConnect(code) {
@@ -1197,7 +1248,8 @@ function replayRecent(m) {
   if (!m || !Array.isArray(m.r)) return;
   checkBoot(m.boot);
   const missed = m.r.map(([d, t, g]) => ({ device: RECENT_DEVICES[d], t: t * 1000, g: Number(g) }))
-                    .filter(r => r.device && r.t > live.lastT).sort((a, b) => a.t - b.t);
+                    .filter(r => r.device && r.t > live.lastT && r.t > Date.now() - 24 * 3600e3 && r.t < Date.now() + 300e3)
+                    .sort((a, b) => a.t - b.t);
   if (!missed.length) return;
   const before = live.events.length ? live.events[0].at : 0;
   // Any scale quiet for longer than SEGMENT_END_MS before time `until`: its burst is over
@@ -1272,6 +1324,7 @@ function endSegment(device) {
 function addEvent(scene, text) {
   live.events.unshift({ scene, text, at: liveNowMs() });
   live.events = live.events.slice(0, 6);
+  saveLive();
   if (live.replaying) return;                             // catching up: one summary toast instead
   const cat = currentCat();
   toast(`${cat ? cat.name : "Your cat"}: ${text}`);
@@ -1300,7 +1353,8 @@ function ago(t) {
 
 // Card skeleton; updateLive() fills it in place so animations don't restart
 function liveCard(cat) {
-  liveConnect(cat.live).catch(() => {});
+  liveConnect(cat.live).catch(() => {});   // (a new connection clears the live state first...)
+  loadLive(cat);                            // (...then this cat's saved live data is loaded)
   return `<div class="live" id="live">
     <div class="live-head"><span class="live-dot" id="live-dot"></span><span id="live-label">Live from the scales</span><span class="code">${esc(cat.live)}</span>
       <button class="link-btn" id="live-reset" style="padding:0 0 0 6px;font-size:14px">Reset</button></div>
@@ -1314,8 +1368,7 @@ function updateLive() {
   const el = $("live"), cat = currentCat();
   if (!el || !cat) return;
   // Learning screen: once the scales report, the "today" cards count what they measured
-  if (live.today.any) document.querySelectorAll("[data-today]").forEach(e => e.textContent = todayText(e.dataset.today));
-  if ($("learn-live-note")) $("learn-live-note").hidden = !live.today.any;
+  document.querySelectorAll("[data-today]").forEach(e => e.textContent = todayText(cat, e.dataset.today));
   // The scale says "offline" the moment it drops off (stopped simulation, lost Wi-Fi)
   const fresh = !live.offline && (live.online || Date.now() - live.lastMsg < 75000);
   $("live-dot").className = "live-dot" + (fresh ? " on" : "");
@@ -1593,7 +1646,8 @@ function alertHistory(cat, d) {
 /* ---------------- Home ---------------- */
 let preview = null;   // demo: preview a mascot animation
 async function renderHome() {
-  const cat = currentCat(), d = await catData(cat);
+  const cat = currentCat(); syncDay(cat);
+  const d = await catData(cat);
   if (cat !== currentCat() || db.ui.tab !== "home") return;
   const el = $("view-home");
   if (learning(cat)) return renderLearning(cat, d, el);
@@ -1664,8 +1718,8 @@ function renderLearning(cat, d, el) {
     ${cat.live ? liveCard(cat) : ""}
     <div class="center"><h2 style="font-size:24px">Learning ${esc(cat.name)}'s routine</h2>
       <p class="soft">Every cat is different, so Purrcast first learns what's normal for ${esc(cat.name)}.</p></div>
-    <div class="learn-grid">${cards.map(c => `<div class="learn-card">${mascot(c.scene, c.lbl, cat.coat)}<p class="big"${cat.live ? ` data-today="${c.key}"` : ""}>${c.big}</p><p class="lbl">${c.lbl}</p></div>`).join("")}</div>
-    ${cat.live ? `<p class="small-print center" id="learn-live-note" hidden>Today's numbers are counted live from the scales.</p>` : ""}
+    <div class="learn-grid">${cards.map(c => `<div class="learn-card">${mascot(c.scene, c.lbl, cat.coat)}<p class="big"${cat.live ? ` data-today="${c.key}"` : ""}>${cat.live ? todayText(cat, c.key) : c.big}</p><p class="lbl">${c.lbl}</p></div>`).join("")}</div>
+    ${cat.live ? `<p class="small-print center">Counted live from the scales since midnight.</p>` : ""}
     <div>
       <div class="progress" role="progressbar" aria-valuemin="1" aria-valuemax="${BASELINE_DAYS}" aria-valuenow="${cat.day}" aria-label="Learning progress"><div style="width:${pct}%"></div></div>
       <p class="soft center" style="margin-top:8px">Day ${cat.day} of ${BASELINE_DAYS} · first summary in ${left} day${left === 1 ? "" : "s"}</p>
@@ -1691,10 +1745,12 @@ const METRICS = [
   { key: "weight_kg", tile: "weight", label: "Weight", unit: "kg", per: "" },
 ];
 async function renderDash() {
-  const cat = currentCat(), d = await catData(cat);
+  const cat = currentCat(); syncDay(cat);
+  const d = await catData(cat);
   if (cat !== currentCat() || db.ui.tab !== "dash") return;
-  const el = $("view-dash"), k = weightScale(cat, d.history);
-  const days = d.upto;
+  const liveLearning = cat.live && learning(cat);        // a live cat that's still learning: only what the scales measured
+  const el = $("view-dash"), k = liveLearning ? 1 : weightScale(cat, d.history);
+  const days = liveLearning ? liveDays(cat) : d.upto;
   const base = d.history.slice(0, BASELINE_DAYS);
   const s = d.status, colour = COLOUR[s.level] || "green";
   const changed = Object.fromEntries((s.tiles || []).map(t => [t.key, !t.ok]));
@@ -1724,7 +1780,7 @@ async function renderDash() {
     const line = usual ? `<line x1="0" x2="${w}" y1="${h - 1 - usual / max * (h - 8)}" y2="${h - 1 - usual / max * (h - 8)}"/>` : "";
     const flag = changed[m.tile] && !learning(cat) ? ` changed${colour === "red" ? " red" : ""}` : "";
     return `<div class="card metric${flag}">${ICONS[m.tile]}
-      <div class="m-top"><span class="m-name">${m.label}</span><span class="m-val">${fmtVal(m, last ? last[m.key] : null)} <span class="m-sub">on day ${d.day}</span></span></div>
+      <div class="m-top"><span class="m-name">${m.label}</span><span class="m-val">${fmtVal(m, last ? last[m.key] : null)} <span class="m-sub">on day ${liveLearning ? cat.day : d.day}</span></span></div>
       <p class="m-sub">${usual ? `Usual: ${fmtVal(m, usual)}${m.per ? ` ${m.per}` : ""}. ` : ""}${words}</p>
       <svg class="chart" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="${m.label}, last ${vals.length} days. ${words}">${bars}${line}</svg></div>`;
   }).join("");
