@@ -77,6 +77,10 @@ TYPICAL_VISITS_MAX = _float("TYPICAL_VISITS_MAX", 7)          # healthy: ~2-4 pe
 NOT_EATING_G = _float("NOT_EATING_G", 5)                      # under this per day = ate almost nothing
 TYPICAL_WATER_ML_PER_KG = _float("TYPICAL_WATER_ML_PER_KG", 100)  # above this per kg per day = high
 
+# Eating under this fraction of normal for this many days in a row = urgent
+EATING_HALF_FRACTION = _float("EATING_HALF_FRACTION", 0.5)
+EATING_HALF_DAYS = int(_float("EATING_HALF_DAYS", 3))
+
 # Litter visits averaging this % above normal for a week = worth a vet visit
 VISITS_UP_PCT = _float("VISITS_UP_PCT", 30)
 
