@@ -266,6 +266,7 @@ Potential areas of future development include:
 ## Demo
 
 - **App on your phone:** [v-agalkathir.github.io/NatHacks_2026/ui-concept](https://v-agalkathir.github.io/NatHacks_2026/ui-concept/) (open it, then **Add to Home Screen**)
+- **Live hardware demo:** [v-agalkathir.github.io/NatHacks_2026/ui-concept/?live=PURR-7F3A](https://v-agalkathir.github.io/NatHacks_2026/ui-concept/?live=PURR-7F3A) (start the Wokwi simulation in [`hardware/wokwi/`](hardware/wokwi/) first)
 - **Video:** [Add demonstration link]
 
 ## Getting Started

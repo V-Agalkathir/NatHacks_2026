@@ -1,7 +1,7 @@
 // Offline support: keeps a copy of the app so it opens with no internet.
 // Bump VERSION whenever you change the app, so phones pick up the new files.
-const VERSION = "purrcast-v13";
-const FILES = ["./", "index.html", "snapshot.js", "manifest.webmanifest", "icon-192.png", "icon-512.png", "icon-180.png"];
+const VERSION = "purrcast-v14";
+const FILES = ["./", "index.html", "snapshot.js", "manifest.webmanifest", "manifest-live.webmanifest", "icon-192.png", "icon-512.png", "icon-180.png"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));

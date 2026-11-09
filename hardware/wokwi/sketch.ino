@@ -55,7 +55,7 @@ const uint16_t MQTT_PORT    = 1883;
 const time_t   START_EPOCH  = 1794124800;    // fallback clock (2026-11-08 08:00 UTC) if internet time fails
 const uint32_t BURST_MS     = 1000;          // reading interval while something is changing
 const uint32_t HEARTBEAT_MS = 30UL * 1000;   // quiet check-in (demo: 30 s; real scales: 1 hour)
-const uint32_t SETTLE_MS    = 5000;          // this long with no change = back to quiet
+const uint32_t SETTLE_MS    = 2000;          // this long with no change = back to quiet
 const float    CHANGE_G     = 3.0;           // a change this big (grams) means something is happening
 const int      PRE_ROLL     = 3;             // calm readings sent from just BEFORE an activity
                                              // (sensors/ and the app use them as the "before" weight)
@@ -163,17 +163,17 @@ float sliderAction(int i, float sliderG, uint32_t now) {
   Action& a = act[i];
   if (i < 2) {                                         // food / water bowl
     float up = sliderG - a.lastSlider;
-    if (up > 0) { a.used += up / 1000.0 * BOWL_G_PER_KG; a.wiggleUntil = now + 3000; }
+    if (up > 0) { a.used += up / 1000.0 * BOWL_G_PER_KG; a.wiggleUntil = now + 1500; }
     a.lastSlider = sliderG;                            // sliding down: nothing happens
     float g = -a.used;
     if (now < a.wiggleUntil) g += wobble(now, 4);      // lapping / chewing
     return g;
   }
   bool on = sliderG >= CAT_ON_SLIDER_G;                // litter box / bed
-  if (on && !a.catOn) { a.catOn = true; a.peak = 0; a.wiggleUntil = now + 3000; }
+  if (on && !a.catOn) { a.catOn = true; a.peak = 0; a.wiggleUntil = now + 1500; }
   if (on) a.peak = fmaxf(a.peak, sliderG);
   if (!on && a.catOn) {
-    a.catOn = false; a.wiggleUntil = now + 3000;
+    a.catOn = false; a.wiggleUntil = now + 1500;
     if (i == 2) a.left += a.peak / 1000.0 * LITTER_G_PER_KG;   // what the visit left behind
   }
   float g = a.left + (a.catOn ? CAT_G : 0);

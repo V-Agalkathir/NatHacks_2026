@@ -6,7 +6,9 @@
 <title>Purrcast</title>
 <meta name="description" content="Purrcast: one simple update when your cat's habits change.">
 <meta name="theme-color" content="#F5FFC6">
-<link rel="manifest" href="manifest.webmanifest">
+<link rel="manifest" id="manifest" href="manifest.webmanifest">
+<script>/* hardware demo link (?live=CODE) installs as its own home-screen app */
+if (new URLSearchParams(location.search).get("live")) document.getElementById("manifest").href = "manifest-live.webmanifest";</script>
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-180.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -598,9 +600,12 @@ const store = {
 
 /* ---------------- Saved state ---------------- */
 // db = { accounts: { email: { name, email, pass, vet, vetPhone, units, cats: [...] } }, session, ui: { catId, tab } }
-let db = store.get("purrcast2") || { accounts: {}, session: null, ui: {} };
+// The hardware demo link (?live=CODE) keeps its own data, so it never mixes with the normal app
+const LIVE_DEMO = (params.get("live") || "").trim().toUpperCase();
+const DB_KEY = LIVE_DEMO ? "purrcast-live" : "purrcast2";
+let db = store.get(DB_KEY) || { accounts: {}, session: null, ui: {} };
 db.ui = db.ui || {};
-const save = () => store.set("purrcast2", db);
+const save = () => store.set(DB_KEY, db);
 const me = () => db.accounts[db.session] || null;
 const cats = () => (me() ? me().cats : []);
 const catById = id => cats().find(c => c.id === id);
@@ -1086,7 +1091,7 @@ const LIVE_DEVICES = [
   { id: "litter", icon: "litter", label: "Litter" }, { id: "bed", icon: "bed", label: "Bed" },
 ];
 const CAT_ON_G = 1500;      // a jump this big on the litter box or bed = the cat is on it
-const SEGMENT_END_MS = 6000; // no reading for this long = the burst is over
+const SEGMENT_END_MS = 2500; // no reading for this long = the burst is over
 const live = { code: null, client: null, online: false, lastMsg: 0, dev: {}, events: [], scene: null, boot: null };
 
 // Forget everything seen so far (the simulation restarted, or the owner tapped Reset)
@@ -1543,9 +1548,10 @@ async function renderHome() {
   el.innerHTML = `
     ${dayBar(cat, d)}
     <div class="who">${sticker(cat, "", st.color)}<p class="name">${esc(cat.name)}</p></div>
+    ${cat.live ? liveCard(cat) : ""}
     ${statusCard(cat, d)}
     ${followUpCard(cat, d)}
-    ${cat.live ? liveCard(cat) : `<p class="section-title">What ${esc(cat.name)} did last</p>
+    ${cat.live ? "" : `<p class="section-title">What ${esc(cat.name)} did last</p>
     <div class="now">${mascot(last.scene, fillName(TITLE[last.scene] || TITLE.idle, cat), cat.coat)}
       <p class="what">${esc(fillName(TITLE[last.scene] || TITLE.idle, cat))}</p><p class="when">${esc(last.text)}</p></div>
     ${rec.length > 1 ? `<ul class="earlier" aria-label="Latest of each activity">${rec.slice(1, 4).map(r =>
@@ -1802,7 +1808,7 @@ async function renderProfile() {
   $("p-logout").addEventListener("click", logout);
   $("p-wipe").addEventListener("click", e => {
     if (!e.target.dataset.armed) { e.target.dataset.armed = "1"; e.target.textContent = "Tap again to delete everything"; return; }
-    store.del("purrcast2"); store.del("purrcast"); location.reload();
+    store.del(DB_KEY); store.del("purrcast"); location.reload();
   });
 }
 
@@ -1824,8 +1830,19 @@ if ("serviceWorker" in navigator && (location.protocol === "https:" || location.
 }
 
 /* ---------------- Start ---------------- */
+// Hardware demo: ?live=PURR-7F3A opens straight onto a cat paired to the live Wokwi scales
+function startLiveDemo(code) {
+  const email = "live-demo";
+  const acct = db.accounts[email] || (db.accounts[email] = { name: "Demo", email, pass: null, vet: "", vetPhone: "", units: "lb", cats: [] });
+  let cat = acct.cats[0];
+  if (!cat) acct.cats.push(cat = { id: newId(), name: "Luna", age: 3, weightKg: 4.2, sex: "female", coat: null, photo: null,
+    photoCoat: null, conditions: "", linkId: "luna", paired: SENSORS.map(s => s.id), day: 60 });
+  cat.live = code;
+  db.session = email; db.ui = { catId: cat.id, tab: db.ui.tab || "home" }; save();
+}
 (async () => {
   await loadSims();
+  if (LIVE_DEMO && !me()) startLiveDemo(LIVE_DEMO);
   route();
 })();
 </script>
