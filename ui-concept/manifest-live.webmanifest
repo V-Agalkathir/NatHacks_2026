@@ -1,0 +1,30 @@
+{
+  "name": "Purrcast Live",
+  "short_name": "Purrcast Live",
+  "description": "Live demo: the Purrcast app connected to the simulated scales.",
+  "start_url": "./?live=PURR-7F3A",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F5FFC6",
+  "theme_color": "#F5FFC6",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "id": "./?live"
+}

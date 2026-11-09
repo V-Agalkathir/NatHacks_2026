@@ -6,7 +6,9 @@
 <title>Purrcast</title>
 <meta name="description" content="Purrcast: one simple update when your cat's habits change.">
 <meta name="theme-color" content="#F5FFC6">
-<link rel="manifest" href="manifest.webmanifest">
+<link rel="manifest" id="manifest" href="manifest.webmanifest">
+<script>/* hardware demo link (?live=CODE) installs as its own home-screen app */
+if (new URLSearchParams(location.search).get("live")) document.getElementById("manifest").href = "manifest-live.webmanifest";</script>
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-180.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -277,6 +279,26 @@ body.has-tabs .tabbar { display: grid; }
 .earlier svg { width: 28px; height: 28px; flex: none; }
 .section-title { font-size: 18px; font-weight: 600; margin-bottom: -8px; }
 
+/* Live from the scales (Wokwi ESP32 over MQTT) */
+.live { display: flex; flex-direction: column; gap: 12px; background: var(--paper); border: var(--line) solid var(--ink);
+  border-radius: 24px; padding: 14px; box-shadow: var(--pop-sm); }
+.live-head { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.live-head .code { margin-left: auto; font-size: 14px; font-weight: 500; color: var(--ink-soft); }
+.live-dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--ink); background: #CFC8D8; flex: none; }
+.live-dot.on { background: var(--green); animation: livepulse 1.6s ease-in-out infinite; }
+@keyframes livepulse { 50% { box-shadow: 0 0 0 5px rgba(127,216,164,.35); } }
+.live .now { box-shadow: none; border-width: 2.5px; }
+.live-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.live-cell { text-align: center; border: 2.5px solid var(--ink); border-radius: 16px; padding: 6px 2px; font-size: 13px; transition: background .3s; }
+.live-cell svg { width: 26px; height: 26px; display: block; margin: 0 auto 2px; }
+.live-cell b { display: block; font-size: 15px; }
+.live-cell.busy { background: var(--butter); }
+.live-pair { display: flex; flex-direction: column; gap: 8px; background: var(--paper); border: var(--line) solid var(--ink);
+  border-radius: 20px; padding: 12px 14px; box-shadow: var(--pop-sm); }
+.live-pair .row { display: flex; gap: 10px; align-items: stretch; }
+.live-pair .input { flex: 1; min-width: 0; font-size: 17px; letter-spacing: .5px; }
+@media (prefers-reduced-motion: reduce) { .live-dot.on { animation: none; } }
+
 /* Learning period */
 .learn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .learn-card {
@@ -506,6 +528,14 @@ body.has-tabs .tabbar { display: grid; }
     <h2 id="pair-title">Pair <span data-catname></span>'s scales</h2>
     <p class="soft">Put each scale in place, then tap Scan.</p>
     <div class="sensors" id="sensors"></div>
+    <div class="live-pair">
+      <p><b>Using the live Wokwi scales?</b> Type the pair code shown on the scale's screen.</p>
+      <div class="row">
+        <input class="input" id="pair-code" value="PURR-7F3A" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Pair code">
+        <button class="btn small" id="live-connect">Connect</button>
+      </div>
+      <p class="small-print" id="live-msg" role="status"></p>
+    </div>
     <div class="demo-note">
       <p>Demo: which simulated cat's data should <span data-catname></span> use?</p>
       <div class="chips" id="pair-chips"></div>
@@ -570,9 +600,12 @@ const store = {
 
 /* ---------------- Saved state ---------------- */
 // db = { accounts: { email: { name, email, pass, vet, vetPhone, units, cats: [...] } }, session, ui: { catId, tab } }
-let db = store.get("purrcast2") || { accounts: {}, session: null, ui: {} };
+// The hardware demo link (?live=CODE) keeps its own data, so it never mixes with the normal app
+const LIVE_DEMO = (params.get("live") || "").trim().toUpperCase();
+const DB_KEY = LIVE_DEMO ? "purrcast-live" : "purrcast2";
+let db = store.get(DB_KEY) || { accounts: {}, session: null, ui: {} };
 db.ui = db.ui || {};
-const save = () => store.set("purrcast2", db);
+const save = () => store.set(DB_KEY, db);
 const me = () => db.accounts[db.session] || null;
 const cats = () => (me() ? me().cats : []);
 const catById = id => cats().find(c => c.id === id);
@@ -1011,7 +1044,7 @@ function renderPair() {
   $("sensors").innerHTML = SENSORS.map(s => {
     const done = pairing.paired.includes(s.id);
     return `<div class="sensor${done ? " paired" : ""}">${ICONS[s.icon]}
-      <div class="s-name">${s.name}<span>${done ? `Paired to ${esc(pairing.name)}` : "Not paired"}</span></div>
+      <div class="s-name">${s.name}<span>${done ? (pairing.live ? `Live, code ${esc(pairing.live)}` : `Paired to ${esc(pairing.name)}`) : "Not paired"}</span></div>
       <button class="btn small" data-scan="${s.id}" ${done ? "disabled" : ""}>${done ? "Paired" : "Scan"}</button></div>`;
   }).join("");
   $("pair-chips").innerHTML = sims.map(s =>
@@ -1043,6 +1076,230 @@ $("pair-back").addEventListener("click", () => {
   draft = pairing; $("cat-name").value = draft.name; $("cat-conditions").value = draft.conditions || "";
   document.querySelector(`input[name=sex][value=${draft.sex}]`).checked = true;
   renderCatForm();
+});
+
+/* ---------------- Live scales (Wokwi ESP32 over MQTT) ----------------
+   The ESP32 publishes every weight reading to purrcast/<pair code>/readings on a
+   public MQTT broker; the app subscribes and spots activity as it happens, the
+   same way sensors/ does: calm readings before, a burst while the cat is at a
+   scale, calm readings after. History and the daily status still come from the
+   engine; this card shows what's happening right now. */
+const BROKER = params.get("broker") || "wss://broker.hivemq.com:8884/mqtt";
+const MQTT_JS = "https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js";
+const LIVE_DEVICES = [
+  { id: "food", icon: "food", label: "Food" }, { id: "water", icon: "water", label: "Water" },
+  { id: "litter", icon: "litter", label: "Litter" }, { id: "bed", icon: "bed", label: "Bed" },
+];
+const CAT_ON_G = 1500;      // a jump this big on the litter box or bed = the cat is on it
+const SEGMENT_END_MS = 2500; // no reading for this long = the burst is over
+const live = { code: null, client: null, online: false, lastMsg: 0, dev: {}, events: [], scene: null, boot: null };
+
+// Forget everything seen so far (the simulation restarted, or the owner tapped Reset)
+function resetLive() {
+  Object.values(live.dev).forEach(d => clearTimeout(d.timer));
+  Object.assign(live, { dev: {}, events: [], scene: null, lastMsg: live.lastMsg });
+  updateLive();
+}
+
+// Every reading carries the ESP32's boot id; a new id means the simulation restarted
+function checkBoot(boot) {
+  if (!boot) return;
+  if (live.boot && boot !== live.boot) resetLive();
+  live.boot = boot;
+}
+
+function loadMqtt() {
+  if (window.mqtt) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = MQTT_JS; s.onload = resolve; s.onerror = () => reject(new Error("Couldn't load the live connection"));
+    document.head.appendChild(s);
+  });
+}
+
+function liveDisconnect() {
+  if (live.client) { try { live.client.end(true); } catch {} }
+  Object.values(live.dev).forEach(d => clearTimeout(d.timer));
+  Object.assign(live, { code: null, client: null, online: false, lastMsg: 0, dev: {}, events: [], scene: null, boot: null });
+}
+
+async function liveConnect(code) {
+  code = String(code || "").trim().toUpperCase();
+  if (!code) return;
+  if (live.code === code && live.client) return;
+  liveDisconnect();
+  await loadMqtt();
+  live.code = code;
+  const c = window.mqtt.connect(BROKER, {
+    clientId: "purrcast-app-" + Math.random().toString(16).slice(2, 10),
+    reconnectPeriod: 3000, connectTimeout: 8000,
+  });
+  live.client = c;
+  c.on("connect", () => c.subscribe([`purrcast/${code}/readings`, `purrcast/${code}/status`, `purrcast/${code}/last/+`]));
+  c.on("message", (topic, buf) => {
+    if (live.client !== c) return;
+    const text = buf.toString();
+    if (topic.endsWith("/status")) { live.online = text === "online"; updateLive(); return; }
+    let m; try { m = JSON.parse(text); } catch { return; }
+    if (topic.includes("/last/")) {
+      if (live.boot && m.boot && m.boot !== live.boot) return;   // old value from before a restart
+      return onLatest(m.device, Number(m.g));
+    }
+    checkBoot(m.boot);
+    onReading(m.device, Number(m.g));
+  });
+}
+
+const devState = id => live.dev[id] || (live.dev[id] = { g: null, seg: [], timer: null, empty: null, since: null, catKg: null, busy: false });
+const median = a => { const b = [...a].sort((x, y) => x - y); return b[Math.floor(b.length / 2)]; };
+
+function onReading(device, g) {
+  if (!LIVE_DEVICES.some(d => d.id === device) || !isFinite(g)) return;
+  live.online = true; live.lastMsg = Date.now();
+  const s = devState(device);
+  s.g = g;
+  if (s.empty == null && (device === "litter" || device === "bed")) s.empty = g;
+  s.seg.push(g);
+  s.busy = s.seg.length >= 3 && Math.max(...s.seg) - Math.min(...s.seg) >= 3;
+  clearTimeout(s.timer);
+  s.timer = setTimeout(() => endSegment(device), SEGMENT_END_MS);
+  updateLive();
+}
+
+// Each scale's latest reading, kept on the broker: fills the tiles straight away
+function onLatest(device, g) {
+  if (!LIVE_DEVICES.some(d => d.id === device) || !isFinite(g)) return;
+  const s = devState(device);
+  if (s.g == null) s.g = g;
+  // Only trust it as the "empty" weight if no cat seems to be on it (demo scales: box ~6 kg, bed ~1.5 kg)
+  const EMPTY_MAX = { litter: 8000, bed: 4000 };
+  if (s.empty == null && EMPTY_MAX[device] && g < EMPTY_MAX[device]) s.empty = g;
+  live.lastMsg = live.lastMsg || Date.now();
+  updateLive();
+}
+
+const fmtDur = mins => mins < 1 ? `${Math.max(1, Math.round(mins * 60))} s` : `${Math.round(mins)} min`;
+
+// A burst just finished: work out what the cat did
+function endSegment(device) {
+  const s = devState(device), seg = s.seg;
+  s.seg = []; s.busy = false;
+  if (seg.length < 4) return updateLive();                 // a heartbeat, nothing happened
+  const before = median(seg.slice(0, 3)), after = median(seg.slice(-3)), now = Date.now();
+
+  if (device === "water" || device === "food") {
+    const drop = before - after;
+    if (drop >= 2 && drop < 100) addEvent(device === "water" ? "drink" : "eat",
+      device === "water" ? `Drank ${Math.round(drop)} ml` : `Ate ${Math.round(drop)} g`);
+    else if (drop >= 100) addEvent("idle", `${device === "water" ? "Water" : "Food"} bowl knocked over? Not counted`);
+    else if (-drop >= 50) addEvent("idle", `${device === "water" ? "Water" : "Food"} bowl refilled. Not counted`);
+    return updateLive();
+  }
+
+  // Litter box or bed: compare with the empty weight
+  const base = s.empty ?? before;
+  const onTop = seg.filter(v => v - base > CAT_ON_G);
+  if (after - base > CAT_ON_G) {                           // cat still on it (sitting still)
+    if (s.since == null) { s.since = now - seg.length * 1000; s.catKg = (median(onTop) - base) / 1000; }
+  } else {
+    if (onTop.length || s.since != null) {                  // cat got off: the visit or nap is over
+      const start = s.since ?? now - seg.length * 1000;
+      const kg = s.catKg ?? (median(onTop) - base) / 1000;
+      const mins = (now - start) / 60000;
+      if (device === "litter") addEvent("litter", `Used the litter box for ${fmtDur(mins)}, left ${Math.round(Math.max(0, after - base))} g. Weighs ${fmtWeight(kg)}`);
+      else addEvent("sleep", `Napped for ${fmtDur(mins)}. Weighs ${fmtWeight(kg)}`);
+    }
+    s.since = null; s.catKg = null; s.empty = after;        // new empty weight (litter now includes the output)
+  }
+  updateLive();
+}
+
+function addEvent(scene, text) {
+  live.events.unshift({ scene, text, at: Date.now() });
+  live.events = live.events.slice(0, 6);
+  const cat = currentCat();
+  toast(`${cat ? cat.name : "Your cat"}: ${text}`);
+}
+
+// What's happening right now, for the mascot
+function liveNow(cat) {
+  const d = id => live.dev[id] || {};
+  const on = id => d(id).since != null || (d(id).g != null && d(id).empty != null && d(id).g - d(id).empty > CAT_ON_G);
+  if (d("water").busy) return { scene: "drink", what: `${cat.name} is drinking`, when: "Right now, on the water bowl" };
+  if (d("food").busy) return { scene: "eat", what: `${cat.name} is eating`, when: "Right now, at the food bowl" };
+  if (on("litter")) return { scene: "litter", what: `${cat.name} is in the litter box`, when: "Right now" };
+  if (on("bed")) return { scene: "sleep", what: `${cat.name} is napping`, when: "Right now, on the bed" };
+  const e = live.events[0];
+  if (e) {
+    const TITLE = { drink: "had a drink", eat: "had a snack", litter: "used the litter box", sleep: "woke up from a nap", idle: "is relaxing" };
+    return { scene: e.scene === "sleep" ? "idle" : e.scene === "idle" ? "idle" : e.scene, what: `${cat.name} ${TITLE[e.scene]}`, when: `${e.text}, ${ago(e.at)}` };
+  }
+  return { scene: "idle", what: `${cat.name} is relaxing`, when: live.lastMsg ? "Scales are quiet" : "Waiting for the scales…" };
+}
+
+function ago(t) {
+  const s = Math.round((Date.now() - t) / 1000);
+  return s < 45 ? "just now" : s < 3600 ? `${Math.round(s / 60)} min ago` : `${Math.round(s / 3600)} h ago`;
+}
+
+// Card skeleton; updateLive() fills it in place so animations don't restart
+function liveCard(cat) {
+  liveConnect(cat.live).catch(() => {});
+  return `<div class="live" id="live">
+    <div class="live-head"><span class="live-dot" id="live-dot"></span><span>Live from the scales</span><span class="code">${esc(cat.live)}</span>
+      <button class="link-btn" id="live-reset" style="padding:0 0 0 6px;font-size:14px">Reset</button></div>
+    <div class="now"><div id="live-stage"></div><div><p class="what" id="live-what"></p><p class="when" id="live-when"></p></div></div>
+    <div class="live-grid">${LIVE_DEVICES.map(d => `<div class="live-cell" id="live-${d.id}">${ICONS[d.icon]}${d.label}<b>—</b></div>`).join("")}</div>
+    <ul class="earlier" id="live-events" aria-label="Live activity"></ul>
+  </div>`;
+}
+
+function updateLive() {
+  const el = $("live"), cat = currentCat();
+  if (!el || !cat) return;
+  const fresh = live.online || Date.now() - live.lastMsg < 75000;
+  $("live-dot").className = "live-dot" + (fresh ? " on" : "");
+  $("live-dot").title = fresh ? "Connected" : "Waiting for the scales";
+  const n = liveNow(cat);
+  if (n.scene !== live.scene) { $("live-stage").innerHTML = mascot(n.scene, n.what, cat.coat); live.scene = n.scene; }
+  $("live-what").textContent = n.what;
+  $("live-when").textContent = n.when;
+  for (const d of LIVE_DEVICES) {
+    const s = live.dev[d.id], cell = $(`live-${d.id}`);
+    cell.querySelector("b").textContent = s && s.g != null ? `${Math.round(s.g)} g` : "—";
+    cell.classList.toggle("busy", !!(s && s.busy));
+  }
+  $("live-events").innerHTML = live.events.slice(n.scene === "idle" && live.events.length ? 1 : 0, 4).map(e =>
+    `<li>${ICONS[SCENE_ICON[e.scene]] || ""}<span>${esc(e.text)} <span class="soft">(${ago(e.at)})</span></span></li>`).join("");
+}
+setInterval(updateLive, 5000);   // keeps "just now / 2 min ago" fresh
+document.addEventListener("click", e => {
+  if (e.target.id !== "live-reset") return;
+  resetLive(); toast("Live data cleared");
+});
+
+// Pairing: connect to the live scales by their code
+$("live-connect").addEventListener("click", async () => {
+  const code = $("pair-code").value.trim().toUpperCase(), msg = $("live-msg"), btn = $("live-connect");
+  if (!code) { msg.textContent = "Type the code shown on the scale's screen."; return; }
+  btn.disabled = true; btn.textContent = "Connecting…"; msg.textContent = "Looking for scales with that code…";
+  try {
+    await liveConnect(code);
+    const start = Date.now();
+    while (!live.online && !live.lastMsg && Date.now() - start < 15000) await new Promise(r => setTimeout(r, 300));
+    if (live.online || live.lastMsg) {
+      pairing.live = code;
+      pairing.paired = SENSORS.map(s => s.id);
+      renderPair();
+      $("live-msg").textContent = "Connected to 4 live scales.";
+    } else {
+      liveDisconnect();
+      msg.textContent = `No scales answered to ${code}. Is the Wokwi simulation running?`;
+    }
+  } catch (e) {
+    msg.textContent = "Couldn't reach the live connection. Check your internet and try again.";
+  }
+  btn.disabled = false; btn.textContent = "Connect";
 });
 
 /* ---------------- Cat picker ---------------- */
@@ -1291,17 +1548,19 @@ async function renderHome() {
   el.innerHTML = `
     ${dayBar(cat, d)}
     <div class="who">${sticker(cat, "", st.color)}<p class="name">${esc(cat.name)}</p></div>
+    ${cat.live ? liveCard(cat) : ""}
     ${statusCard(cat, d)}
     ${followUpCard(cat, d)}
-    <p class="section-title">What ${esc(cat.name)} did last</p>
+    ${cat.live ? "" : `<p class="section-title">What ${esc(cat.name)} did last</p>
     <div class="now">${mascot(last.scene, fillName(TITLE[last.scene] || TITLE.idle, cat), cat.coat)}
       <p class="what">${esc(fillName(TITLE[last.scene] || TITLE.idle, cat))}</p><p class="when">${esc(last.text)}</p></div>
     ${rec.length > 1 ? `<ul class="earlier" aria-label="Latest of each activity">${rec.slice(1, 4).map(r =>
-      `<li>${ICONS[SCENE_ICON[r.scene]] || ""}<span>${r.label ? `${esc(r.label)}: <b>${esc(r.short)}</b>` : `<b>${esc(r.text)}</b>`}</span></li>`).join("")}</ul>` : ""}
+      `<li>${ICONS[SCENE_ICON[r.scene]] || ""}<span>${r.label ? `${esc(r.label)}: <b>${esc(r.short)}</b>` : `<b>${esc(r.text)}</b>`}</span></li>`).join("")}</ul>` : ""}`}
     ${notesCard(cat)}`;
   wireNotes(cat, renderHome);
   wireDayBar(el, cat, d, renderHome);
   wireResponses(el, cat, d, renderHome);
+  updateLive();
   el.querySelector("[data-action=review]")?.addEventListener("click", () => setTab("dash"));
   el.querySelector("[data-action=share]")?.addEventListener("click", () => shareHistory(cat, d));
 }
@@ -1341,6 +1600,7 @@ function renderLearning(cat, d, el) {
   el.innerHTML = `
     <div class="who">${sticker(cat, "md", alert ? STATUS.red.color : null)}<p class="name">${esc(cat.name)}</p></div>
     ${alert || followUpCard(cat, d)}
+    ${cat.live ? liveCard(cat) : ""}
     <div class="center"><h2 style="font-size:24px">Learning ${esc(cat.name)}'s routine</h2>
       <p class="soft">Every cat is different, so Purrcast first learns what's normal for ${esc(cat.name)}.</p></div>
     <div class="learn-grid">${cards.map(c => `<div class="learn-card">${mascot(c.scene, c.lbl, cat.coat)}<p class="big">${c.big}</p><p class="lbl">${c.lbl}</p></div>`).join("")}</div>
@@ -1355,6 +1615,7 @@ function renderLearning(cat, d, el) {
       <p>Simulated data from ${esc(simLabel(d.sim))}. Change it in Profile.</p></div>`;
   wireNotes(cat, renderHome);
   wireResponses(el, cat, d, renderHome);
+  updateLive();
   // After day 14 the demo jumps to the end of the simulated data (day 60)
   $("next-day").addEventListener("click", () => { cat.day = cat.day + 1; save(); renderHome(); });
   $("skip-day").addEventListener("click", () => { cat.day = d.last; save(); renderHome(); });
@@ -1547,11 +1808,12 @@ async function renderProfile() {
   $("p-logout").addEventListener("click", logout);
   $("p-wipe").addEventListener("click", e => {
     if (!e.target.dataset.armed) { e.target.dataset.armed = "1"; e.target.textContent = "Tap again to delete everything"; return; }
-    store.del("purrcast2"); store.del("purrcast"); location.reload();
+    store.del(DB_KEY); store.del("purrcast"); location.reload();
   });
 }
 
 function logout() {
+  liveDisconnect();
   db.session = null; db.ui = {}; save(); preview = null;
   route();
 }
@@ -1568,8 +1830,19 @@ if ("serviceWorker" in navigator && (location.protocol === "https:" || location.
 }
 
 /* ---------------- Start ---------------- */
+// Hardware demo: ?live=PURR-7F3A opens straight onto a cat paired to the live Wokwi scales
+function startLiveDemo(code) {
+  const email = "live-demo";
+  const acct = db.accounts[email] || (db.accounts[email] = { name: "Demo", email, pass: null, vet: "", vetPhone: "", units: "lb", cats: [] });
+  let cat = acct.cats[0];
+  if (!cat) acct.cats.push(cat = { id: newId(), name: "Luna", age: 3, weightKg: 4.2, sex: "female", coat: null, photo: null,
+    photoCoat: null, conditions: "", linkId: "luna", paired: SENSORS.map(s => s.id), day: 60 });
+  cat.live = code;
+  db.session = email; db.ui = { catId: cat.id, tab: db.ui.tab || "home" }; save();
+}
 (async () => {
   await loadSims();
+  if (LIVE_DEMO && !me()) startLiveDemo(LIVE_DEMO);
   route();
 })();
 </script>

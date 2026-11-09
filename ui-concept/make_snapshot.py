@@ -75,7 +75,7 @@ snapshot["recent_by_day"] = recent_by_day
 out = Path(__file__).resolve().parent / "snapshot.js"
 out.write_text(
     "// Made by make_snapshot.py from the engine's real output. Don't edit by hand.\n"
-    f"window.PURRCAST_SNAPSHOT = {json.dumps(snapshot, separators=(",", ":"), default=str)};\n",
+    f"window.PURRCAST_SNAPSHOT = {json.dumps(snapshot, separators=(',', ':'), default=str)};\n",
     encoding="utf-8",
 )
 print(f"Wrote {out.name} from {snapshot['source']}:")
