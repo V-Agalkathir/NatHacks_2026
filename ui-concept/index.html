@@ -1179,7 +1179,8 @@ function episodes(d) {
 }
 const responsesIn = (cat, ep, d) => (cat.responses || []).filter(r => r.day >= ep.start && r.day <= Math.min(ep.end, d.day));
 const daysText = ep => ep.start === ep.end ? `day ${ep.start}` : `days ${ep.start}–${ep.end}`;
-function responseLine(cat, r) { return `You dealt with this on day ${r.day}.`; }
+function responseLine(cat, r) { return `You checked on ${cat.name} on day ${r.day}.`; }
+const QUIET_DAYS = 7;   // after "I've checked on her", stay quiet this long, then remind if it's still going
 
 // The big status card, or a calmer "you've already acted" version of it
 function statusCard(cat, d) {
@@ -1188,28 +1189,30 @@ function statusCard(cat, d) {
   const what = colour === "red" ? msg.split(" This pattern")[0] : noticed(msg, cat);
   const eps = episodes(d), ep = eps.length && eps[eps.length - 1].end === d.day ? eps[eps.length - 1] : null;
   // Only answers given at this level or higher count (a red day re-alerts after a yellow was answered)
-  const answered = ep ? responsesIn(cat, ep, d).filter(r => r.rank >= RANK[s.level]) : [];
+  const allAnswers = ep ? responsesIn(cat, ep, d).filter(r => r.rank >= RANK[s.level]) : [];
+  const answered = allAnswers.filter(r => d.day - r.day < QUIET_DAYS);
+  const stillGoing = allAnswers.length && !answered.length;   // checked a week+ ago, still not better
 
   // Owner said "I dealt with it": one calm card, no repeated alert.
   // It comes back in full only if things get worse or a new problem starts.
   if (colour !== "green" && answered.length) {
     const r = answered[answered.length - 1];
     return `<div class="status ${colour}" role="status">
-      <span class="pill" style="--c:${st.color}">Dealt with</span>
-      <h3>${esc(responseLine(cat, r))}</h3>
-      <p>We'll keep watching ${esc(cat.name)} and let you know if it gets worse or something new appears.</p>
+      <span class="pill" style="--c:${st.color}">${st.pill} · checked</span>
+      <h3>Thanks for checking on ${esc(cat.name)}.</h3>
+      <p>${esc(responseLine(cat, r))} We'll keep watching and let you know if it gets worse, if something new appears, or if it's still going in a week.</p>
       ${colour === "red" ? `<p class="foot">If ${esc(cat.name)} seems worse, contact an emergency vet right away.</p>` : ""}
     </div>`;
   }
 
   let extra = "";
   if (s.level === "blip") extra = `<div class="noticed"><b>One unusual day</b>${esc(noticed(msg, cat))} We'll keep watching over the next 48 hours.</div>`;
-  else if (colour !== "green" && msg) extra = `<div class="noticed"><b>What we noticed${ep && ep.start < d.day ? ` (since day ${ep.start})` : ""}</b>${esc(what)}</div>`;
+  else if (colour !== "green" && msg) extra = `<div class="noticed"><b>${stillGoing ? `Still going a week after you checked (since day ${ep.start})` : `What we noticed${ep && ep.start < d.day ? ` (since day ${ep.start})` : ""}`}</b>${esc(what)}</div>`;
   let actions = "";
   if (colour === "red") {
-    actions = urgentActions(me()) + `<div class="actions"><button class="btn quiet" data-respond="dealt">I dealt with it</button></div>`;
+    actions = urgentActions(me()) + `<div class="actions"><button class="btn quiet" data-respond="checked">I've checked on ${esc(cat.name)}</button></div>`;
   } else if (colour === "yellow") {
-    actions = `<div class="actions"><button class="btn" data-action="share">Share history with your vet</button><button class="btn quiet" data-respond="dealt">I dealt with it</button></div>`;
+    actions = `<div class="actions"><button class="btn" data-action="share">Share history with your vet</button><button class="btn quiet" data-respond="checked">I've checked on ${esc(cat.name)}</button></div>`;
   }
   return `<div class="status ${colour}" role="status">
       <span class="pill" style="--c:${st.color}">${st.pill}</span>
@@ -1283,7 +1286,7 @@ async function renderHome() {
     <p class="section-title">What ${esc(cat.name)} did last</p>
     <div class="now">${mascot(last.scene, fillName(TITLE[last.scene] || TITLE.idle, cat), cat.coat)}
       <p class="what">${esc(fillName(TITLE[last.scene] || TITLE.idle, cat))}</p><p class="when">${esc(last.text)}</p></div>
-    ${rec.length > 1 ? `<ul class="earlier" aria-label="Earlier activity">${rec.slice(1, 3).map(r =>
+    ${rec.length > 1 ? `<ul class="earlier" aria-label="Earlier activity">${rec.slice(1, 4).map(r =>
       `<li>${ICONS[SCENE_ICON[r.scene]] || ""}<span>${esc(r.text)}</span></li>`).join("")}</ul>` : ""}
     ${notesCard(cat)}`;
   wireNotes(cat, renderHome);
@@ -1315,7 +1318,7 @@ function renderLearning(cat, d, el) {
       <div class="noticed"><b>What we noticed</b>${esc(msg)}</div>
       <p class="foot">${esc(st.foot)}</p>
       ${urgentActions(me())}
-      <div class="actions"><button class="btn quiet" data-respond="dealt">I dealt with it</button></div>
+      <div class="actions"><button class="btn quiet" data-respond="checked">I've checked on ${esc(cat.name)}</button></div>
       <p class="small-print">Purrcast is still learning ${esc(cat.name)}'s routine, but this pattern is worrying for any cat.</p>
     </div>`;
   }
