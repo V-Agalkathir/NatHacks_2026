@@ -123,12 +123,15 @@ label.field, .field { display: flex; flex-direction: column; gap: 6px; font-weig
   background: var(--paper); border: var(--line) solid var(--ink); box-shadow: var(--pop-sm); cursor: pointer;
 }
 .stepper output { font-size: 19px; font-weight: 600; flex: 1; text-align: center; white-space: nowrap; }
+/* Weight looks like plain text (same as age); tap it to type an exact number */
+.stepper .wval { flex: 1; display: flex; justify-content: center; align-items: baseline; gap: 4px; min-width: 0; }
 .stepper .num {
-  width: 100%; min-width: 0; flex: 1; text-align: right; font: 600 19px var(--font); color: var(--ink);
-  background: var(--paper); border: 2.5px solid var(--ink); border-radius: 12px; padding: 6px 4px; -moz-appearance: textfield;
+  width: 3.4ch; min-width: 0; padding: 0; text-align: right; font: 600 19px var(--font); color: var(--ink);
+  background: transparent; border: 0; border-radius: 0; -moz-appearance: textfield; appearance: textfield;
 }
+.stepper .num:focus { outline: none; border-bottom: 2px solid var(--ink); }
 .stepper .num::-webkit-inner-spin-button, .stepper .num::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-.stepper .unit { font-weight: 600; margin-left: -4px; }
+.stepper .unit { font-size: 19px; font-weight: 600; }
 
 .swatches { display: flex; gap: 10px; flex-wrap: wrap; }
 .swatch {
@@ -302,6 +305,18 @@ body.has-tabs .tabbar { display: grid; }
 .detail h3 { font-size: 17px; margin-bottom: 4px; }
 .detail + .detail { margin-top: 12px; }
 
+/* Demo day bar */
+.daybar { gap: 6px; }
+.daybar-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.daybar-top .center { display: flex; flex-direction: column; align-items: center; }
+.daybar .dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; border: 2px solid var(--ink); margin-right: 5px; vertical-align: -1px; }
+.round {
+  width: 40px; height: 40px; border-radius: 50%; flex: none; cursor: pointer;
+  font: 700 24px/1 var(--font); color: var(--ink); background: var(--paper);
+  border: var(--line) solid var(--ink); box-shadow: var(--pop-sm);
+}
+.daybar input[type=range] { width: 100%; accent-color: var(--nose); }
+
 /* ===================== Owner notes ===================== */
 .notes { display: flex; flex-direction: column; gap: 10px; }
 .notes textarea { font: 500 17px var(--font); resize: vertical; min-height: 72px; }
@@ -453,8 +468,7 @@ body.has-tabs .tabbar { display: grid; }
       <div class="field"><span id="weight-label">Weight</span>
         <div class="stepper" role="group" aria-labelledby="weight-label">
           <button type="button" data-step="weight" data-d="-1" aria-label="Lighter">–</button>
-          <input class="num" id="cat-weight" type="number" inputmode="decimal" step="0.1" min="1" aria-label="Weight">
-          <span class="unit" id="cat-weight-unit">lb</span>
+          <span class="wval"><input class="num" id="cat-weight" type="number" inputmode="decimal" step="0.1" min="1" aria-label="Weight (tap to type)"><span class="unit" id="cat-weight-unit">lb</span></span>
           <button type="button" data-step="weight" data-d="1" aria-label="Heavier">+</button>
         </div>
       </div>
@@ -743,7 +757,20 @@ async function loadSims() {
 
 // Per-cat data cache: { status, recent, history }
 const cache = {};
+// Data for this cat on its current demo day (cat.day = 1..60):
+// that day's engine result, the activity up to that day, and the full history.
 async function catData(cat) {
+  const raw = await catRaw(cat), sim = raw.sim, group = ageGroup(cat.age);
+  const last = Math.max(1, raw.history.length);
+  const day = Math.min(Math.max(1, cat.day || 1), last);
+  const tl = !online && SNAP && SNAP.timeline;
+  const idx = tl && tl.days[sim.cat_id] && tl.days[sim.cat_id][group];
+  const status = idx ? tl.statuses[idx[day - 1]] : raw.status;
+  const recent = !online && SNAP && SNAP.recent_by_day && SNAP.recent_by_day[sim.cat_id]
+    ? SNAP.recent_by_day[sim.cat_id][day - 1] || [] : raw.recent;
+  return { sim, status, recent, history: raw.history, upto: raw.history.slice(0, day), day, last };
+}
+async function catRaw(cat) {
   const sim = simOf(cat), group = ageGroup(cat.age);
   const key = `${sim.cat_id}|${group}`;
   if (cache[key]) return cache[key];
@@ -1061,6 +1088,27 @@ $("topbar").addEventListener("click", e => {
 
 const learning = cat => cat.day <= BASELINE_DAYS;
 
+// Demo: step through the simulated days to show when each message first appears
+function dayBar(cat, d) {
+  const colour = STATUS[COLOUR[d.status.level] || "green"];
+  return `<div class="demo-note daybar">
+    <div class="daybar-top">
+      <button class="round" data-day="-1" aria-label="Previous day">‹</button>
+      <div class="center"><b id="daybar-label">Demo: day ${d.day} of ${d.last}</b>
+        <span class="small-print"><i class="dot" style="background:${colour.color}"></i>${colour.pill}</span></div>
+      <button class="round" data-day="1" aria-label="Next day">›</button>
+    </div>
+    <input type="range" id="daybar-range" min="1" max="${d.last}" value="${d.day}" aria-label="Demo day">
+  </div>`;
+}
+function wireDayBar(cat, d, rerender) {
+  const go = day => { cat.day = Math.min(d.last, Math.max(1, day)); save(); rerender(); };
+  document.querySelectorAll(".daybar [data-day]").forEach(b => b.addEventListener("click", () => go(cat.day + Number(b.dataset.day))));
+  const r = $("daybar-range");
+  r.addEventListener("input", () => $("daybar-label").textContent = `Demo: day ${r.value} of ${d.last}`);
+  r.addEventListener("change", () => go(Number(r.value)));
+}
+
 /* ---------------- Owner notes ---------------- */
 // The owner writes down what they noticed. Saved per cat, listed on the Dashboard,
 // and included in the summary shared with the vet.
@@ -1140,6 +1188,7 @@ async function renderHome() {
                   litter: "{name} used the litter box", sleep: "{name} is napping" };
 
   el.innerHTML = `
+    ${dayBar(cat, d)}
     <div class="who">${sticker(cat, "", st.color)}<p class="name">${esc(cat.name)}</p></div>
     <div class="status ${colour}" role="status">
       <span class="pill" style="--c:${st.color}">${st.pill}</span>
@@ -1158,6 +1207,7 @@ async function renderHome() {
     ${notesCard(cat)}
     <p class="small-print">Demo: showing simulated data from ${esc(simLabel(d.sim))}. Change it in Profile.</p>`;
   wireNotes(cat, renderHome);
+  wireDayBar(cat, d, renderHome);
   el.querySelector("[data-action=review]")?.addEventListener("click", () => setTab("dash"));
   el.querySelector("[data-action=share]")?.addEventListener("click", () => shareHistory(cat, d));
 }
@@ -1170,10 +1220,9 @@ function renderLearning(cat, d, el) {
   const visits = row.litter_visits == null ? "—" : `${Math.round(row.litter_visits)} visit${row.litter_visits === 1 ? "" : "s"}`;
   const pct = Math.round(cat.day / BASELINE_DAYS * 100), left = BASELINE_DAYS - cat.day;
   // Urgent patterns are checked from day 1 against typical ranges for any cat
-  const early = (SNAP && SNAP.early && SNAP.early[d.sim.cat_id] || [])[cat.day - 1];
   let alert = "";
-  if (early && early.level === "urgent") {
-    const st = STATUS.red, msg = personalise(early.message, cat, d).split(" This pattern")[0];
+  if (d.status.level === "urgent") {
+    const st = STATUS.red, msg = personalise(d.status.message, cat, d).split(" This pattern")[0];
     alert = `<div class="status red" role="alert">
       <span class="pill" style="--c:${st.color}">${st.pill}</span>
       <h3>${esc(fillName(st.head, cat))}</h3>
@@ -1207,8 +1256,8 @@ function renderLearning(cat, d, el) {
       <p>Simulated data from ${esc(simLabel(d.sim))}. Change it in Profile.</p></div>`;
   wireNotes(cat, renderHome);
   // After day 14 the demo jumps to the end of the simulated data (day 60)
-  $("next-day").addEventListener("click", () => { cat.day = cat.day >= BASELINE_DAYS ? 60 : cat.day + 1; save(); renderHome(); });
-  $("skip-day").addEventListener("click", () => { cat.day = 60; save(); renderHome(); });
+  $("next-day").addEventListener("click", () => { cat.day = cat.day + 1; save(); renderHome(); });
+  $("skip-day").addEventListener("click", () => { cat.day = d.last; save(); renderHome(); });
 }
 
 /* ---------------- Dashboard ---------------- */
@@ -1222,7 +1271,7 @@ async function renderDash() {
   const cat = currentCat(), d = await catData(cat);
   if (cat !== currentCat() || db.ui.tab !== "dash") return;
   const el = $("view-dash"), k = weightScale(cat, d.history);
-  const days = learning(cat) ? d.history.slice(0, cat.day) : d.history;
+  const days = d.upto;
   const base = d.history.slice(0, BASELINE_DAYS);
   const s = d.status, colour = COLOUR[s.level] || "green";
   const changed = Object.fromEntries((s.tiles || []).map(t => [t.key, !t.ok]));
@@ -1271,6 +1320,7 @@ async function renderDash() {
     <button class="btn" id="dash-share">Share history with your vet</button>`;
 
   el.innerHTML = `
+    ${learning(cat) ? "" : dayBar(cat, d)}
     <div><h2>${esc(cat.name)}'s dashboard</h2>
       <p class="soft">${learning(cat) ? `Day ${cat.day} of ${BASELINE_DAYS}: Purrcast is still learning ${esc(cat.name)}'s usual, so there's nothing to compare yet.` : `Last 14 days. Highlighted cards changed.`}</p></div>
     <p class="legend"><span><i></i>each day</span>${learning(cat) ? "" : `<span><s></s>${esc(cat.name)}'s usual</span>`}<span><i style="background:none;border-style:dashed"></i>no reliable reading</span></p>
@@ -1279,6 +1329,7 @@ async function renderDash() {
     ${notesList(cat)}
     ${details}`;
   $("dash-share")?.addEventListener("click", () => shareHistory(cat, d));
+  if (!learning(cat)) wireDayBar(cat, d, renderDash);
   el.querySelectorAll("[data-del-note]").forEach(b => b.addEventListener("click", () => {
     if (!b.dataset.armed) { b.dataset.armed = "1"; b.textContent = "Tap to delete"; return; }
     cat.notes = (cat.notes || []).filter(n => n.id !== b.dataset.delNote); save(); renderDash();
@@ -1287,7 +1338,7 @@ async function renderDash() {
 
 // A plain-text summary the owner can text or email to the vet
 async function shareHistory(cat, d) {
-  const k = weightScale(cat, d.history), last7 = d.history.slice(-7), base = d.history.slice(0, BASELINE_DAYS);
+  const k = weightScale(cat, d.history), last7 = d.upto.slice(-7), base = d.history.slice(0, BASELINE_DAYS);
   const avg = (rows, key) => { const v = rows.map(r => r[key]).filter(x => x != null); return v.length ? v.reduce((a, x) => a + x, 0) / v.length : null; };
   const line = (label, key, f) => `- ${label}: ${f(avg(last7, key))} a day this week (usual ${f(avg(base, key))})`;
   const st = STATUS[COLOUR[d.status.level] || "green"];
@@ -1351,7 +1402,7 @@ async function renderProfile() {
     <div class="demo-note">
       <p>Demo: simulated data for ${esc(cur.name)}</p>
       <div class="chips" id="p-sims">${sims.map(s => `<button class="chip" aria-pressed="${s.cat_id === sim.cat_id}" data-link="${s.cat_id}">${esc(simLabel(s))}</button>`).join("")}</div>
-      <p>Demo: ${esc(cur.name)} is on day ${cur.day > BASELINE_DAYS ? 60 : cur.day}</p>
+      <p>Demo: ${esc(cur.name)} is on day ${cur.day}</p>
       <div class="chips"><button class="chip" id="p-day1">Back to day 1 (learning)</button><button class="chip" id="p-day60">Jump to day 60</button></div>
       <p>Demo: preview the "did last" animation</p>
       <div class="chips" id="p-anim">${["drink", "eat", "litter", "sleep"].map(k =>

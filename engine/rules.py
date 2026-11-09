@@ -95,6 +95,10 @@ def decide(rows: pd.DataFrame, base: dict, z_recent: list[dict], trends: dict,
     if _below_for_days(rows, "food_g", base, 0.4, 2):
         return "urgent", [_finding("not_eating", "food_g", rows, base)]
 
+    # 10+ litter visits in a day: urgent for any cat, whatever its usual
+    if many := reference.many_visits_today(rows):
+        return "urgent", many
+
     # No litter visits at all for a full day: possible blockage, for any cat
     if no_visits := reference.no_visits_today(rows):
         return "urgent", no_visits

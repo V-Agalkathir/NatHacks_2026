@@ -58,9 +58,18 @@ def assess_rows(rows: pd.DataFrame, cat: dict) -> dict:
         return result
 
     # 1. normal  2. z-scores  3. trends  4. rules decide  5. explain
-    z_recent = anomaly.recent(rows, base, n=2)
-    trend_info = trends.compute(rows, base)
-    level, findings = rules.decide(rows, base, z_recent, trend_info, prof)
+    level, findings = _judge(rows, base, prof)
+
+    # Keep yellow steady: if the last 2 days were "worth a vet visit", a quieter
+    # day doesn't flip back to green (owners would see yellow-green-yellow).
+    if level in ("good", "blip") and len(rows) > config.BASELINE_DAYS + 1:
+        for back in (1, 2):
+            if len(rows) - back <= config.BASELINE_DAYS:
+                break
+            prev_level, prev_findings = _judge(rows.iloc[:-back], base, prof)
+            if prev_level == "vet":
+                level, findings = prev_level, prev_findings
+                break
 
     details = explain.build_details(level, findings, cat)
     details["age_note"] = age.note(prof, cat)
@@ -72,6 +81,13 @@ def assess_rows(rows: pd.DataFrame, cat: dict) -> dict:
         "details": details,
     })
     return explain.polish(result)
+
+
+def _judge(rows: pd.DataFrame, base: dict, prof: dict):
+    """Rules for the last day of `rows`: (level, findings)."""
+    z_recent = anomaly.recent(rows, base, n=2)
+    trend_info = trends.compute(rows, base)
+    return rules.decide(rows, base, z_recent, trend_info, prof)
 
 
 def _find_cat(cat_id: str) -> dict:
