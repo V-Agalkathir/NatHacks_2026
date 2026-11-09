@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
-from . import age, anomaly, baseline, config, data, explain, rules, trends
+from . import age, anomaly, baseline, config, data, explain, reference, rules, trends
 
 
 def _now() -> str:
@@ -34,8 +34,19 @@ def assess_rows(rows: pd.DataFrame, cat: dict) -> dict:
     # Not enough days yet to know what's normal
     base = baseline.compute(rows)
     if len(rows) <= config.BASELINE_DAYS or not base:
+        # Urgent patterns are still checked from day 1, against typical ranges for any cat
+        if early := reference.early_urgent(rows):
+            result.update({
+                "level": "urgent",
+                "learning": True,
+                "message": explain.build_message("urgent", early, cat),
+                "tiles": explain.build_tiles("urgent", early, rows.iloc[-1]),
+                "details": explain.build_details("urgent", early, cat),
+            })
+            return explain.polish(result)
         result.update({
             "level": "good",
+            "learning": True,
             "message": (f"Learning {name}'s usual patterns ({len(rows)} of {config.BASELINE_DAYS} days). "
                         f"If you notice any symptoms, contact your vet."),
             "tiles": [{"key": k, "label": f"{k.capitalize()} learning", "ok": True}

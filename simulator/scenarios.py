@@ -15,6 +15,8 @@ SCENARIO_BY_CAT = {
     "coco": "dental",
     "nala": "not_eating",
     "pip": "growing",
+    "ziggy": "sick_from_start",
+    "simba": "early_blockage",
 }
 
 VALID_SCENARIOS = {
@@ -28,6 +30,8 @@ VALID_SCENARIOS = {
     "hyperthyroid",
     "dental",
     "growing",
+    "sick_from_start",
+    "early_blockage",
 }
 
 
@@ -70,6 +74,20 @@ def apply_scenario(
         growth = 1.005**day_number
         for key in ("weight_kg", "food_g_day", "water_ml_day", "litter_output_g_day"):
             values[key] *= growth
+        return values
+
+    # A urinary-blockage-like day in the first week, while Purrcast is still
+    # learning (day 5 only: the vet treated it). Shows urgent alerts from day 1.
+    if scenario == "early_blockage":
+        if day_number == 5:
+            values["litter_visits_day"] *= 5
+            values["litter_avg_sec"] *= 0.3
+            values["litter_output_g_day"] *= 0.02
+        return values
+
+    # Already unwell before monitoring started: the baseline in baseline.py is
+    # high from day 1 and stays steady, so it never looks like a "change".
+    if scenario == "sick_from_start":
         return values
 
     if day_number < onset_day:

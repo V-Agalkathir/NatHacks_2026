@@ -17,7 +17,7 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
 from engine import data  # noqa: E402
-from engine.run import assess, history, list_cats, now, recent  # noqa: E402
+from engine.run import assess, assess_rows, history, list_cats, now, recent  # noqa: E402
 
 cats = list_cats()
 info = {c["cat_id"]: c for c in data.load_cats()}
@@ -36,6 +36,17 @@ snapshot = {
     "history": {c["cat_id"]: history(c["cat_id"], 90) for c in cats},
 }
 
+# Days 1-14 (still learning): urgent checks still run, so save each day's result.
+# early[cat][d - 1] = status the app shows on learning day d.
+daily = data.load_daily()
+snapshot["early"] = {}
+for c in cats:
+    rows = data.cat_rows(daily, c["cat_id"])
+    snapshot["early"][c["cat_id"]] = [
+        {k: v for k, v in assess_rows(rows.head(d), info[c["cat_id"]]).items() if k in ("level", "message", "details")}
+        for d in range(1, 15)
+    ]
+
 out = Path(__file__).resolve().parent / "snapshot.js"
 out.write_text(
     "// Made by make_snapshot.py from the engine's real output. Don't edit by hand.\n"
@@ -45,4 +56,5 @@ out.write_text(
 print(f"Wrote {out.name} from {snapshot['source']}:")
 for c in snapshot["cats"]:
     lv = {g: snapshot["status"][c["cat_id"]][g]["level"] for g in AGE_GROUPS}
-    print(f"  {c['cat_id']:<8} {c['scenario']:<17} kitten={lv['kitten']:<7} adult={lv['adult']:<7} senior={lv['senior']}")
+    urgent_days = [i + 1 for i, e in enumerate(snapshot["early"][c["cat_id"]]) if e["level"] == "urgent"]
+    print(f"  {c['cat_id']:<8} {c['scenario']:<17} learning urgent days={urgent_days} kitten={lv['kitten']:<7} adult={lv['adult']:<7} senior={lv['senior']}")

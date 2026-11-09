@@ -12,6 +12,7 @@ seniors get flagged a little earlier.
 import pandas as pd
 
 from . import config
+from . import reference
 from .age import expected_change, profile
 from .trends import is_trend
 
@@ -94,8 +95,15 @@ def decide(rows: pd.DataFrame, base: dict, z_recent: list[dict], trends: dict,
     if _below_for_days(rows, "food_g", base, 0.4, 2):
         return "urgent", [_finding("not_eating", "food_g", rows, base)]
 
+    # No litter visits at all for a full day: possible blockage, for any cat
+    if no_visits := reference.no_visits_today(rows):
+        return "urgent", no_visits
+
     # ---------------- 🟡 VET ----------------
-    vet = []
+    # The learned "usual" is itself outside the typical range: the cat may
+    # already have been unwell when monitoring started (listed first, so a
+    # change-over-time finding on the same metric replaces it)
+    vet = reference.starting_point(base, prof)
 
     # A steady trend in any metric
     for m, t in trends.items():

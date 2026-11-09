@@ -125,6 +125,8 @@ def phrase(f: dict, cat: dict) -> str:
         return f"{p['subj_l']} has been visiting the litter box more often than usual this week"
     if kind == "eat_less_lose_weight":
         return f"{p['subj_l']} has been eating less and slowly losing weight"
+    if kind == "high_start":
+        return f"{p['pos']} usual {START_WORDS[metric]} is higher than typical for a cat {p['pos']} size"
     if metric in config.OWNER_HIDDEN:
         return f"{p['pos']} litter box use has changed"
 
@@ -173,6 +175,20 @@ def describe(f: dict, cat: dict) -> str:
     if kind == "eat_less_lose_weight":
         return (f"Eating less ({fmt('food_g', value)} yesterday vs {pos} usual {fmt('food_g', usual)}) "
                 f"while slowly losing weight.")
+    if kind == "high_start":
+        days = config.BASELINE_DAYS
+        if f["metric"] == "water_ml":
+            return (f"Purrcast learned {pos} usual from the first {days} days: about {fmt('water_ml', value)} "
+                    f"of water a day. That's above the typical range for a {f['weight']:.1f} kg cat "
+                    f"(under about {fmt('water_ml', usual)} a day), so this may have started before monitoring did.")
+        return (f"Purrcast learned {pos} usual from the first {days} days: about {value:.1f} litter visits a day. "
+                f"Healthy cats usually pee about 2-4 times a day, so this may have started before monitoring did.")
+    if kind == "many_visits_any_cat":
+        return f"{value:.0f} litter visits in the last day. Most healthy cats go only a few times a day."
+    if kind == "no_visits":
+        return "No litter box visits in the last day."
+    if kind == "not_eating_any_cat":
+        return "Almost nothing eaten for 2 days in a row."
     if kind == "litter_blockage":
         return (f"{value:.0f} litter visits in the last day (usually about {usual:.0f}), "
                 f"most of them very short.")
@@ -197,6 +213,9 @@ def headline(findings: list[dict]) -> list[dict]:
     return (shown or findings)[:2]
 
 
+START_WORDS = {"water_ml": "drinking", "litter_visits": "number of litter visits"}
+
+
 def build_message(level: str, findings: list[dict], cat: dict) -> str:
     """The one sentence (or two) on the home screen."""
     name = cat.get("name", cat.get("cat_id", "Your cat"))
@@ -213,7 +232,23 @@ def build_message(level: str, findings: list[dict], cat: dict) -> str:
                     f"far more often than usual (about {f['usual']:.0f}). {tail}")
         if f["kind"] == "not_eating":
             return f"{name} has eaten very little for 2 days in a row. {tail}"
+        if f["kind"] == "many_visits_any_cat":
+            return (f"{name} visited the litter box {f['value']:.0f} times in the last day. "
+                    f"Most healthy cats only go a few times a day. {tail}")
+        if f["kind"] == "no_visits":
+            return (f"{name} hasn't used the litter box in the last day. A cat that can't pee "
+                    f"may have a blockage. {tail}")
+        if f["kind"] == "not_eating_any_cat":
+            return f"{name} has eaten almost nothing for 2 days in a row. {tail}"
         return f"{name} shows a warning pattern. {tail}"
+
+    # The usual itself is high (cat may have been unwell from the start)
+    top = headline(findings)
+    if top and all(f["kind"] == "high_start" for f in top):
+        p = pronouns(cat)
+        what = " and ".join(START_WORDS[f["metric"]] for f in top)
+        return (f"{name}'s usual {what} {'are' if len(top) > 1 else 'is'} higher than typical "
+                f"for a cat {p['pos']} size. It's worth mentioning to your vet.")
 
     # blip and vet: describe what changed (up to 2 findings), neutrally
     changes = ", and ".join(phrase(f, cat) for f in headline(findings))
@@ -237,8 +272,14 @@ def build_tiles(level: str, findings: list[dict], last_row) -> list[dict]:
             tiles.append({"key": key, "label": f"{name} steady", "ok": True})
             continue
         v, u = hit.get("value"), hit.get("usual")
-        if hit["kind"] == "litter_blockage":
+        if hit["kind"] in ("litter_blockage", "many_visits_any_cat"):
             word = "many visits"
+        elif hit["kind"] == "no_visits":
+            word = "no visits"
+        elif hit["kind"] == "not_eating_any_cat":
+            word = "almost none"
+        elif hit["kind"] == "high_start":
+            word = "high"
         elif hit["metric"] in config.OWNER_HIDDEN:
             word = "changed"
         elif hit["kind"] == "visits_up":
@@ -291,6 +332,11 @@ def build_details(level: str, findings: list[dict], cat: dict) -> dict:
         "urgent": "Contact your vet or an emergency clinic now. Don't wait to see if it passes.",
     }[level]
 
+    top = headline(findings)
+    if level == "vet" and top and all(f["kind"] == "high_start" for f in top):
+        call_if = (f"This has been steady since monitoring started, so it won't show up as a change, "
+                   f"but it's worth mentioning to your vet. Contact them sooner if {p['subj_l']} stops eating, "
+                   f"hides, vomits, or strains in the litter box.")
     return {"changed": changed, "maybe_nothing": maybe_nothing.strip(), "call_if": call_if}
 
 
