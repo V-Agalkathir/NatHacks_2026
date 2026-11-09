@@ -4,6 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Purrcast</title>
+<meta name="description" content="Purrcast: one simple update when your cat's habits change.">
+<meta name="theme-color" content="#E3F2EF">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Purrcast">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -46,7 +55,7 @@ body {
   background-image: radial-gradient(rgba(46,33,64,.07) 2px, transparent 2.5px);
   background-size: 26px 26px;
 }
-.app { max-width: 420px; min-height: 100dvh; margin: 0 auto; padding: 20px 16px 32px; display: flex; flex-direction: column; }
+.app { max-width: 420px; min-height: 100dvh; margin: 0 auto; padding: calc(20px + env(safe-area-inset-top)) 16px calc(32px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; }
 .screen { display: none; flex: 1; flex-direction: column; gap: 20px; }
 .screen.active { display: flex; }
 
@@ -459,6 +468,8 @@ label.field, .field { display: flex; flex-direction: column; gap: 6px; font-weig
   <button class="btn" data-close>Close</button>
 </div>
 
+<!-- Real engine results saved by make_snapshot.py; lets the app run with no backend -->
+<script src="snapshot.js"></script>
 <script>
 /* ============================================================
    Purrcast UI concept
@@ -467,8 +478,10 @@ label.field, .field { display: flex; flex-direction: column; gap: 6px; font-weig
    ============================================================ */
 const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
-// Backend runs on the same computer as the UI, port 8000 (works on a phone too)
-const API = params.get("api") || (location.protocol.startsWith("http") ? `http://${location.hostname}:8000` : null);
+// Live backend: same computer as the UI, port 8000 (also works from a phone on the same Wi-Fi).
+// On https hosting (GitHub Pages) there's no backend, so the snapshot is used instead.
+const API = params.get("api") || (location.protocol === "http:" ? `http://${location.hostname}:8000` : null);
+const SNAP = window.PURRCAST_SNAPSHOT || null;
 
 // localStorage can be blocked; never let it break the app
 const store = {
@@ -586,7 +599,7 @@ state.cat = state.cat || { age: 3, weight: 4.2, sex: "female", coat: null, photo
 state.paired = state.paired || [];
 state.linkId = state.linkId || "luna";
 let simCats = FALLBACK_CATS;
-let online = false;
+let online = false;      // true when the live backend answered
 let current = null;      // last status shown
 let preview = null;      // mascot preview override
 const save = () => store.set("purrcast", state);
@@ -783,22 +796,26 @@ async function loadCats() {
     await Promise.all(cats.map(async c => { try { c.sex = (await api(`/cats/${c.cat_id}/vet-report`)).sex; } catch {} }));
     simCats = cats; online = true;
     if (!cats.some(c => c.cat_id === state.linkId)) state.linkId = cats[0].cat_id;
-  } catch { simCats = FALLBACK_CATS; online = false; }
+  } catch {
+    online = false;
+    simCats = SNAP ? SNAP.cats : FALLBACK_CATS;
+    if (!simCats.some(c => c.cat_id === state.linkId)) state.linkId = simCats[0].cat_id;
+  }
+}
+
+async function fromEngine(s) {
+  const P = t => personalise(t, s.name);
+  return { level: s.level, message: await P(s.message),
+    tiles: Object.fromEntries(s.tiles.map(t => [t.key, t.label.replace(/^\w+:?\s*/, "")])),
+    details: { changed: await P(s.details.changed),
+               maybe_nothing: (await P(s.details.maybe_nothing)).replace(/^Things to check:\s*/, ""),
+               call_if: await P(s.details.call_if) } };
 }
 
 async function getStatus() {
   const sim = simCats.find(c => c.cat_id === state.linkId) || simCats[0];
-  if (online) {
-    try {
-      const s = await api(`/cats/${sim.cat_id}/status`);
-      const P = t => personalise(t, s.name);
-      return { level: s.level, message: await P(s.message),
-        tiles: Object.fromEntries(s.tiles.map(t => [t.key, t.label.replace(/^\w+:?\s*/, "")])),
-        details: { changed: await P(s.details.changed),
-                   maybe_nothing: (await P(s.details.maybe_nothing)).replace(/^Things to check:\s*/, ""),
-                   call_if: await P(s.details.call_if) } };
-    } catch {}
-  }
+  if (online) { try { return await fromEngine(await api(`/cats/${sim.cat_id}/status`)); } catch {} }
+  if (SNAP && SNAP.status[sim.cat_id]) return fromEngine(SNAP.status[sim.cat_id]);
   const ex = EXAMPLES[sim.level];
   return { level: sim.level, message: fill(ex.message), tiles: ex.tiles,
            details: Object.fromEntries(Object.entries(ex.details).map(([k, v]) => [k, fill(v)])) };
@@ -806,6 +823,7 @@ async function getStatus() {
 
 async function getNow(level) {
   if (online) { try { const n = await api(`/cats/${state.linkId}/now`); return { scene: n.scene, text: n.text }; } catch {} }
+  if (SNAP && SNAP.now[state.linkId]) { const n = SNAP.now[state.linkId]; return { scene: n.scene, text: n.text }; }
   const scene = FALLBACK_NOW[level] || "idle";
   return { scene, text: NOW_TEXT[scene] };
 }
@@ -884,7 +902,8 @@ function fakeHistory(level) {
 }
 $("week-btn").addEventListener("click", async () => {
   let rows;
-  try { rows = await api(`/cats/${state.linkId}/history?days=30`); } catch { rows = fakeHistory(current.level); }
+  try { rows = await api(`/cats/${state.linkId}/history?days=30`); }
+  catch { rows = (SNAP && SNAP.history[state.linkId]) || fakeHistory(current.level); }
   const last7 = rows.slice(-7), before = rows.slice(0, -7);
   let gaps = 0;
   $("week").innerHTML = WEEK.map(m => {
@@ -914,6 +933,11 @@ $("week-btn").addEventListener("click", async () => {
 /* ---------------- Edit / reset ---------------- */
 $("edit-cat").addEventListener("click", () => { renderCatForm(); show("cat"); });
 $("reset").addEventListener("click", () => { store.clear(); location.reload(); });
+
+/* ---------------- Works offline once installed ---------------- */
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+}
 
 /* ---------------- Start ---------------- */
 (async () => {

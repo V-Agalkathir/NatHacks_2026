@@ -22,6 +22,24 @@ python -m http.server 5500
 
 Open http://localhost:5500. It finds the backend at `localhost:8000` automatically (or pass `?api=http://...`). If the backend isn't running, it falls back to built-in examples so the demo never breaks.
 
+## Put it on your phone as an app (no laptop needed)
+
+The app runs on its own using `snapshot.js`: the engine's real results for all 4 cats, saved ahead of time.
+
+1. **Refresh the snapshot** whenever the data or engine changes (from the repo root):
+   ```bash
+   python ui-concept/make_snapshot.py
+   ```
+2. **Commit and push** `ui-concept/` to `main`.
+3. **Turn on GitHub Pages** (once): repo **Settings → Pages → Build and deployment → Deploy from a branch → `main` / `(root)` → Save**. After a minute or two the app is at
+   `https://<your-github-username>.github.io/NatHacks_2026/ui-concept/`
+   (Pages on a private repo needs a paid GitHub plan; a public repo is free.)
+4. **On your phone**, open that link, then **Share → Add to Home Screen** (iPhone, Safari) or **⋮ → Install app / Add to Home screen** (Android, Chrome). It gets the Purrcast icon, opens full screen, and works offline.
+
+After changing the app, bump `VERSION` in `sw.js` so installed phones pick up the new version.
+
+**Live data instead of the snapshot:** run the backend with `--host 0.0.0.0`, serve this folder with `python -m http.server 5500`, and open `http://<laptop IP>:5500` on a phone on the same Wi-Fi.
+
 ## Demo flow
 
 1. **Create account:** name, email, vet clinic.
