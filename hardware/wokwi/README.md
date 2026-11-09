@@ -39,7 +39,7 @@ The free plan sometimes waits in a build queue first; it starts on its own.
 1. **Start the Wokwi simulation** and wait for **LIVE** in the screen's top-right corner.
 2. **Open the Purrcast app** (phone app from GitHub Pages, or `http://localhost:5500`).
 3. Add a cat. On **Pair the scales**, type the code from the Wokwi screen (`PURR-7F3A`) and tap **Connect**. All 4 scales pair.
-4. Home now has a **Live from the scales** card. With `AUTOPLAY` on, the cat runs its routine every 200 seconds:
+4. Home now has a **Live from the scales** card. Move the sliders to act out the cat (below). Or set `AUTOPLAY = true` and the cat runs this routine by itself every 200 seconds:
 
 | Seconds into the cycle | The cat | The app shows |
 |---|---|---|
@@ -78,11 +78,11 @@ Sliding a bowl back down does nothing (a cat can't un-drink), so you can't creat
 | Setting | Default | What it does |
 |---|---|---|
 | `PAIR_CODE` | `PURR-7F3A` | Code typed into the app. Change it to something unique if another team might use the same one |
-| `AUTOPLAY` | `true` | Plays the cat's routine by itself. Set `false` to drive everything with the sliders |
+| `AUTOPLAY` | `false` | `true` plays the cat's routine by itself. With `false`, nothing happens until you move a slider |
 | `HEARTBEAT_MS` | 30 s | Quiet check-in (real scales: 1 hour) |
 | `CAT_ID` | `luna` | Which cat these scales belong to |
 
-With `AUTOPLAY` off, nothing happens until you move a slider, which is handy for a fully hands-on demo. The amounts per slide (`BOWL_G_PER_KG`, `LITTER_G_PER_KG`), the cat's weight (`CAT_G`) and the built-in scale weights (`BASE_G`) are also at the top of `sketch.ino`.
+The Serial Monitor only prints when something happens (the 30 s check-ins go to the app only). Sliders left up from the last run are ignored until you move them. The amounts per slide (`BOWL_G_PER_KG`, `LITTER_G_PER_KG`), the cat's weight (`CAT_G`) and the built-in scale weights (`BASE_G`) are also at the top of `sketch.ino`.
 
 The broker (`broker.hivemq.com`) is free and public: anyone who knows the pair code could see these readings. Only simulated demo data goes through it. A real product would use a private, secured broker.
 

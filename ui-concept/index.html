@@ -1092,7 +1092,7 @@ const LIVE_DEVICES = [
 ];
 const CAT_ON_G = 1500;      // a jump this big on the litter box or bed = the cat is on it
 const SEGMENT_END_MS = 2500; // no reading for this long = the burst is over
-const live = { code: null, client: null, online: false, offline: false, lastMsg: 0, dev: {}, events: [], today: newToday(), scene: null, boot: null };
+const live = { code: null, client: null, online: false, offline: false, lastMsg: 0, lastT: 0, dev: {}, events: [], today: newToday(), scene: null, boot: null };
 
 // Forget everything seen so far (the simulation restarted, or the owner tapped Reset)
 // What the live scales measured since connecting (shown on the learning screen)
@@ -1110,7 +1110,7 @@ const todayText = key => { const t = live.today;
 
 function resetLive() {
   Object.values(live.dev).forEach(d => clearTimeout(d.timer));
-  Object.assign(live, { dev: {}, events: [], today: newToday(), scene: null, lastMsg: live.lastMsg });
+  Object.assign(live, { dev: {}, events: [], today: newToday(), scene: null, lastMsg: live.lastMsg, lastT: 0 });
   updateLive();
 }
 
@@ -1133,7 +1133,7 @@ function loadMqtt() {
 function liveDisconnect() {
   if (live.client) { try { live.client.end(true); } catch {} }
   Object.values(live.dev).forEach(d => clearTimeout(d.timer));
-  Object.assign(live, { code: null, client: null, online: false, offline: false, lastMsg: 0, dev: {}, events: [], today: newToday(), scene: null, boot: null });
+  Object.assign(live, { code: null, client: null, online: false, offline: false, lastMsg: 0, lastT: 0, dev: {}, events: [], today: newToday(), scene: null, boot: null });
 }
 
 async function liveConnect(code) {
@@ -1148,34 +1148,77 @@ async function liveConnect(code) {
     reconnectPeriod: 3000, connectTimeout: 8000,
   });
   live.client = c;
-  c.on("connect", () => c.subscribe([`purrcast/${code}/readings`, `purrcast/${code}/status`, `purrcast/${code}/last/+`]));
+  c.on("connect", () => c.subscribe([`purrcast/${code}/readings`, `purrcast/${code}/status`, `purrcast/${code}/last/+`, `purrcast/${code}/recent`]));
   c.on("message", (topic, buf) => {
     if (live.client !== c) return;
     const text = buf.toString();
     if (topic.endsWith("/status")) { live.online = text === "online"; live.offline = text === "offline"; updateLive(); return; }
     let m; try { m = JSON.parse(text); } catch { return; }
+    if (topic.endsWith("/recent")) return replayRecent(m);
     if (topic.includes("/last/")) {
       if (live.boot && m.boot && m.boot !== live.boot) return;   // old value from before a restart
       return onLatest(m.device, Number(m.g));
     }
     checkBoot(m.boot);
-    onReading(m.device, Number(m.g));
+    onReading(m.device, Number(m.g), Date.parse(m.t + "Z"));
   });
 }
 
 const devState = id => live.dev[id] || (live.dev[id] = { g: null, seg: [], timer: null, empty: null, since: null, catKg: null, busy: false });
 const median = a => { const b = [...a].sort((x, y) => x - y); return b[Math.floor(b.length / 2)]; };
 
-function onReading(device, g) {
-  if (!LIVE_DEVICES.some(d => d.id === device) || !isFinite(g)) return;
+function onReading(device, g, tMs) {
+  if (!pushReading(device, g, tMs)) return;
   live.online = true; live.offline = false; live.lastMsg = Date.now();
   const s = devState(device);
-  s.g = g;
-  if (s.empty == null && (device === "litter" || device === "bed")) s.empty = g;
-  s.seg.push(g);
-  s.busy = s.seg.length >= 3 && Math.max(...s.seg) - Math.min(...s.seg) >= 3;
   clearTimeout(s.timer);
   s.timer = setTimeout(() => endSegment(device), SEGMENT_END_MS);
+  updateLive();
+}
+// Add one reading to its scale's current burst
+const EMPTY_MAX = { litter: 8000, bed: 4000 };   // heavier than this = a cat is on it (demo box ~6 kg, bed ~1.5 kg)
+function pushReading(device, g, tMs) {
+  if (!LIVE_DEVICES.some(d => d.id === device) || !isFinite(g)) return false;
+  if (tMs) live.lastT = Math.max(live.lastT, tMs);
+  const s = devState(device);
+  s.g = g; s.t = tMs || Date.now();
+  if (s.empty == null && EMPTY_MAX[device] && g < EMPTY_MAX[device]) s.empty = g;
+  s.seg.push(g);
+  s.busy = s.seg.length >= 3 && Math.max(...s.seg) - Math.min(...s.seg) >= 3;
+  return true;
+}
+
+// Catch up after the app was closed: the scale keeps its last 200 readings on the broker
+// ([scale, unix time, grams]); run the ones we haven't seen through the same detection
+const RECENT_DEVICES = ["food", "water", "litter", "bed"];
+let liveClock = null;                                   // replay time, so events get their real time
+const liveNowMs = () => liveClock ?? Date.now();
+function replayRecent(m) {
+  if (!m || !Array.isArray(m.r)) return;
+  checkBoot(m.boot);
+  const missed = m.r.map(([d, t, g]) => ({ device: RECENT_DEVICES[d], t: t * 1000, g: Number(g) }))
+                    .filter(r => r.device && r.t > live.lastT).sort((a, b) => a.t - b.t);
+  if (!missed.length) return;
+  const before = live.events.length ? live.events[0].at : 0;
+  // Any scale quiet for longer than SEGMENT_END_MS before time `until`: its burst is over
+  const closeBursts = until => RECENT_DEVICES
+    .map(id => live.dev[id]).filter(s => s && s.seg.length && until - s.t > SEGMENT_END_MS)
+    .sort((x, y) => x.t - y.t)
+    .forEach(s => { const id = Object.keys(live.dev).find(k => live.dev[k] === s);
+                    clearTimeout(s.timer); liveClock = s.t + SEGMENT_END_MS; endSegment(id); });
+  live.replaying = true;
+  for (const r of missed) { closeBursts(r.t); pushReading(r.device, r.g, r.t); }
+  closeBursts(Date.now());
+  liveClock = null; live.replaying = false;
+  for (const id of RECENT_DEVICES) {                    // a burst still going: finish it the normal way
+    const s = live.dev[id]; if (!s || !s.seg.length) continue;
+    clearTimeout(s.timer);
+    s.timer = setTimeout(() => endSegment(id), Math.max(0, s.t + SEGMENT_END_MS - Date.now()));
+  }
+  const caught = live.events.filter(e => e.at > before).length;
+  const cat = currentCat();
+  if (caught) toast(`Caught up: ${caught} thing${caught === 1 ? "" : "s"} ${cat ? cat.name : "your cat"} did while the app was closed`);
+  live.lastMsg = live.lastMsg || Date.now();
   updateLive();
 }
 
@@ -1184,8 +1227,7 @@ function onLatest(device, g) {
   if (!LIVE_DEVICES.some(d => d.id === device) || !isFinite(g)) return;
   const s = devState(device);
   if (s.g == null) s.g = g;
-  // Only trust it as the "empty" weight if no cat seems to be on it (demo scales: box ~6 kg, bed ~1.5 kg)
-  const EMPTY_MAX = { litter: 8000, bed: 4000 };
+  // Only trust it as the "empty" weight if no cat seems to be on it
   if (s.empty == null && EMPTY_MAX[device] && g < EMPTY_MAX[device]) s.empty = g;
   live.lastMsg = live.lastMsg || Date.now();
   updateLive();
@@ -1198,7 +1240,7 @@ function endSegment(device) {
   const s = devState(device), seg = s.seg;
   s.seg = []; s.busy = false;
   if (seg.length < 4) return updateLive();                 // a heartbeat, nothing happened
-  const before = median(seg.slice(0, 3)), after = median(seg.slice(-3)), now = Date.now();
+  const before = median(seg.slice(0, 3)), after = median(seg.slice(-3)), now = liveNowMs();
 
   if (device === "water" || device === "food") {
     const drop = before - after;
@@ -1228,8 +1270,9 @@ function endSegment(device) {
 }
 
 function addEvent(scene, text) {
-  live.events.unshift({ scene, text, at: Date.now() });
+  live.events.unshift({ scene, text, at: liveNowMs() });
   live.events = live.events.slice(0, 6);
+  if (live.replaying) return;                             // catching up: one summary toast instead
   const cat = currentCat();
   toast(`${cat ? cat.name : "Your cat"}: ${text}`);
 }

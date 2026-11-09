@@ -39,7 +39,7 @@
 // ---------------- Settings ----------------
 const char*    CAT_ID       = "luna";        // which cat profile these scales are paired to
 const char*    PAIR_CODE    = "PURR-7F3A";   // typed into the app to connect; shown on the screen
-const bool     AUTOPLAY     = true;          // play a scripted cat routine (sliders add on top)
+const bool     AUTOPLAY     = false;         // true = play a scripted cat routine by itself (sliders add on top)
 
 // What the scales weigh with no cat activity: food bowl, water bowl, litter box, bed (grams)
 const float    BASE_G[4]       = { 400, 900, 6000, 1500 };
@@ -105,6 +105,15 @@ char topicStatus[64];
 uint32_t lastMqttTryMs = 0;
 bool mqttTried = false;
 bool sendAllNow = false;   // just (re)connected: publish every scale's weight right away
+// The last RECENT_N readings, also kept on the broker ("retained"), so an app that
+// was closed can catch up on what the cat did in the meantime
+const int RECENT_N = 200;
+struct Rec { uint8_t d; uint32_t t; float g; };
+Rec recent[RECENT_N];
+int recentHead = 0, recentCount = 0;
+bool recentDirty = false;
+uint32_t lastRecentPubMs = 0;
+char recentBuf[RECENT_N * 24 + 64];
 char bootId[12];           // new on every restart; the app clears its live data when it changes
 
 // ---------------- Autoplay: a cat's routine ----------------
@@ -155,12 +164,22 @@ struct Action {
   float peak;            // litter: highest slider position during this visit
   float left;            // litter: total output left behind
   uint32_t wiggleUntil;  // a few seconds of movement after an action, like a real cat
+  bool armed;            // litter/bed: slider has been below 1 kg since boot
+  uint32_t graceUntil;   // first seconds after boot: wherever the sliders sit counts as "no action"
 };
 Action act[4];
 
 // Change from the base weight caused by the sliders (grams)
 float sliderAction(int i, float sliderG, uint32_t now) {
   Action& a = act[i];
+  // Wokwi sets the sliders (left where the last run had them) a moment after boot,
+  // so for the first 3 s just remember their positions instead of treating them as the cat
+  if (a.graceUntil == 0) a.graceUntil = now + 3000;
+  if (now < a.graceUntil) {
+    a.lastSlider = sliderG;
+    a.armed = sliderG < CAT_ON_SLIDER_G;
+    return 0;
+  }
   if (i < 2) {                                         // food / water bowl
     float up = sliderG - a.lastSlider;
     if (up > 0) { a.used += up / 1000.0 * BOWL_G_PER_KG; a.wiggleUntil = now + 1500; }
@@ -168,6 +187,10 @@ float sliderAction(int i, float sliderG, uint32_t now) {
     float g = -a.used;
     if (now < a.wiggleUntil) g += wobble(now, 4);      // lapping / chewing
     return g;
+  }
+  if (!a.armed) {                                      // slider still where the last run left it
+    if (sliderG < CAT_ON_SLIDER_G) a.armed = true;
+    return a.left;
   }
   bool on = sliderG >= CAT_ON_SLIDER_G;                // litter box / bed
   if (on && !a.catOn) { a.catOn = true; a.peak = 0; a.wiggleUntil = now + 1500; }
@@ -192,10 +215,14 @@ void formatTime(time_t when, char* out, size_t len) {
 }
 
 // Print one readings.csv row and publish it live
-void printRow(const Scale& s, time_t when, float grams) {
+void printRow(const Scale& s, time_t when, float grams, bool toSerial) {
   char ts[24];
   formatTime(when, ts, sizeof(ts));
-  Serial.printf("%s,%s,%s,%.1f\n", CAT_ID, s.device, ts, grams);
+  if (toSerial) Serial.printf("%s,%s,%s,%.1f\n", CAT_ID, s.device, ts, grams);
+  recent[recentHead] = { (uint8_t)(&s - scales), (uint32_t)when, grams };
+  recentHead = (recentHead + 1) % RECENT_N;
+  if (recentCount < RECENT_N) recentCount++;
+  recentDirty = true;
   if (mqtt.connected()) {
     char msg[128];
     snprintf(msg, sizeof(msg), "{\"cat\":\"%s\",\"device\":\"%s\",\"t\":\"%s\",\"g\":%.1f,\"boot\":\"%s\"}",
@@ -209,9 +236,29 @@ void printRow(const Scale& s, time_t when, float grams) {
   }
 }
 
+// Keep the recent readings on the broker: often while quiet, every 10 s during an activity
+void publishRecent(uint32_t nowMs) {
+  if (!recentDirty || !mqtt.connected()) return;
+  bool anyBusy = false;
+  for (int i = 0; i < SCALE_COUNT; i++) anyBusy |= scales[i].busy;
+  if (nowMs - lastRecentPubMs < (anyBusy ? 10000u : 1000u)) return;
+  int n = snprintf(recentBuf, sizeof(recentBuf), "{\"boot\":\"%s\",\"r\":[", bootId);
+  for (int k = 0; k < recentCount; k++) {
+    const Rec& r = recent[(recentHead - recentCount + k + RECENT_N) % RECENT_N];
+    n += snprintf(recentBuf + n, sizeof(recentBuf) - n, "%s[%u,%lu,%.1f]", k ? "," : "", r.d, (unsigned long)r.t, r.g);
+  }
+  snprintf(recentBuf + n, sizeof(recentBuf) - n, "]}");
+  char topic[64];
+  snprintf(topic, sizeof(topic), "purrcast/%s/recent", PAIR_CODE);
+  mqtt.publish(topic, recentBuf, true);
+  recentDirty = false;
+  lastRecentPubMs = nowMs;
+}
+
 // Send the current reading and blink the LED
-void send(Scale& s, uint32_t nowMs) {
-  printRow(s, time(nullptr), s.grams);
+// toSerial = false for quiet check-ins: the app still gets them, the Serial Monitor stays quiet
+void send(Scale& s, uint32_t nowMs, bool toSerial) {
+  printRow(s, time(nullptr), s.grams, toSerial);
   s.lastSentMs = nowMs;
   digitalWrite(LED_PIN, HIGH);
   ledOffMs = nowMs + 60;
@@ -219,7 +266,7 @@ void send(Scale& s, uint32_t nowMs) {
 
 // Activity just started: first send the calm readings from the last few seconds
 void sendPreRoll(Scale& s) {
-  for (int i = 0; i < s.preCount; i++) printRow(s, s.preTime[i], s.preGrams[i]);
+  for (int i = 0; i < s.preCount; i++) printRow(s, s.preTime[i], s.preGrams[i], true);
   s.preCount = 0;
 }
 
@@ -315,6 +362,7 @@ void setup() {
   snprintf(topicStatus, sizeof(topicStatus), "purrcast/%s/status", PAIR_CODE);
   mqtt.setServer(MQTT_HOST, MQTT_PORT);
   mqtt.setKeepAlive(5);   // the broker notices within ~8 s if the simulation stops, and tells the app "offline"
+  mqtt.setBufferSize(sizeof(recentBuf) + 128);   // room for the recent-readings message
   keepMqtt(millis());
 
   for (int i = 0; i < SCALE_COUNT; i++) {
@@ -322,6 +370,7 @@ void setup() {
     s.hx.begin(s.dtPin, s.sckPin);
     s.hx.set_scale(RAW_PER_GRAM);   // readings in grams
     act[i].lastSlider = s.hx.get_units(1);   // wherever the slider starts counts as "no action"
+    act[i].armed = act[i].lastSlider < CAT_ON_SLIDER_G;   // litter/bed slider left up from last time: ignore until moved down
     // No tare: the contract wants the total weight on the scale (bowl + contents)
     s.grams = s.prevGrams = readGrams(i, millis());
     s.busy = false;
@@ -333,16 +382,17 @@ void setup() {
 
   Serial.println("cat_id,device,timestamp,grams");   // CSV header
   uint32_t now = millis();
-  for (int i = 0; i < SCALE_COUNT; i++) send(scales[i], now);  // first check-in
+  for (int i = 0; i < SCALE_COUNT; i++) send(scales[i], now, true);  // first check-in
 }
 
 // ---------------- Loop ----------------
 void loop() {
   uint32_t now = millis();
   keepMqtt(now);
+  publishRecent(now);
   if (sendAllNow && mqtt.connected()) {
     sendAllNow = false;
-    for (int i = 0; i < SCALE_COUNT; i++) if (!scales[i].busy) send(scales[i], now);
+    for (int i = 0; i < SCALE_COUNT; i++) if (!scales[i].busy) send(scales[i], now, false);
   }
 
   for (int i = 0; i < SCALE_COUNT; i++) {
@@ -356,7 +406,7 @@ void loop() {
       if (!s.busy) {
         s.busy = true;
         sendPreRoll(s);          // the calm seconds just before...
-        send(s, now);            // ...then the start of the activity, right away
+        send(s, now, true);      // ...then the start of the activity, right away
       }
     }
     s.prevGrams = s.grams;
@@ -365,12 +415,12 @@ void loop() {
     if (s.busy) {
       if (now - s.lastChangeMs >= SETTLE_MS) {
         s.busy = false;          // settled: send the final weight, then go quiet
-        send(s, now);
+        send(s, now, true);
       } else if (now - s.lastSentMs >= BURST_MS) {
-        send(s, now);            // 1 reading per second while busy
+        send(s, now, true);      // 1 reading per second while busy
       }
     } else if (now - s.lastSentMs >= HEARTBEAT_MS) {
-      send(s, now);              // quiet check-in: "I'm still here"
+      send(s, now, false);       // quiet check-in: "I'm still here" (app only, not the Serial Monitor)
     }
   }
 
