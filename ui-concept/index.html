@@ -317,6 +317,9 @@ body.has-tabs .tabbar { display: grid; }
 }
 .daybar input[type=range] { width: 100%; accent-color: var(--nose); }
 
+.followup { display: flex; flex-direction: column; gap: 8px; }
+.note-list .dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; border: 2px solid var(--ink); margin-right: 6px; vertical-align: -1px; }
+
 /* ===================== Owner notes ===================== */
 .notes { display: flex; flex-direction: column; gap: 10px; }
 .notes textarea { font: 500 17px var(--font); resize: vertical; min-height: 72px; }
@@ -768,7 +771,8 @@ async function catData(cat) {
   const status = idx ? tl.statuses[idx[day - 1]] : raw.status;
   const recent = !online && SNAP && SNAP.recent_by_day && SNAP.recent_by_day[sim.cat_id]
     ? SNAP.recent_by_day[sim.cat_id][day - 1] || [] : raw.recent;
-  return { sim, status, recent, history: raw.history, upto: raw.history.slice(0, day), day, last };
+  const days = idx ? idx.map(i => tl.statuses[i]) : null;   // every day's result (demo only)
+  return { sim, status, recent, history: raw.history, upto: raw.history.slice(0, day), day, last, days };
 }
 async function catRaw(cat) {
   const sim = simOf(cat), group = ageGroup(cat.age);
@@ -805,6 +809,8 @@ function personalise(text, cat, d) {
       : t.replace(/\bHe\b/g, "She").replace(/\bhe\b/g, "she").replace(/\b(His|Him)\b/g, "Her").replace(/\b(his|him)\b/g, "her");
   }
   const k = weightScale(cat, d.history);
+  // The engine judges the last full day ("yesterday"); in the demo that is the chosen day
+  if (d.day) t = t.replace(/\byesterday\b/g, `on day ${d.day}`);
   return t.replace(/(\d+(?:\.\d+)?) kg/g, (_, n) => fmtWeight(Number(n) * k));
 }
 // "Luna's patterns have changed: she drank more..." -> "She drank more..."
@@ -1094,18 +1100,20 @@ function dayBar(cat, d) {
   return `<div class="demo-note daybar">
     <div class="daybar-top">
       <button class="round" data-day="-1" aria-label="Previous day">‹</button>
-      <div class="center"><b id="daybar-label">Demo: day ${d.day} of ${d.last}</b>
+      <div class="center"><b class="daybar-label">Demo: day ${d.day} of ${d.last}</b>
         <span class="small-print"><i class="dot" style="background:${colour.color}"></i>${colour.pill}</span></div>
       <button class="round" data-day="1" aria-label="Next day">›</button>
     </div>
-    <input type="range" id="daybar-range" min="1" max="${d.last}" value="${d.day}" aria-label="Demo day">
+    <input type="range" class="daybar-range" min="1" max="${d.last}" value="${d.day}" aria-label="Demo day">
   </div>`;
 }
-function wireDayBar(cat, d, rerender) {
+// Wire the day bar inside one tab (Home and Dashboard each have their own)
+function wireDayBar(root, cat, d, rerender) {
+  const bar = root.querySelector(".daybar"); if (!bar) return;
   const go = day => { cat.day = Math.min(d.last, Math.max(1, day)); save(); rerender(); };
-  document.querySelectorAll(".daybar [data-day]").forEach(b => b.addEventListener("click", () => go(cat.day + Number(b.dataset.day))));
-  const r = $("daybar-range");
-  r.addEventListener("input", () => $("daybar-label").textContent = `Demo: day ${r.value} of ${d.last}`);
+  bar.querySelectorAll("[data-day]").forEach(b => b.addEventListener("click", () => go(cat.day + Number(b.dataset.day))));
+  const r = bar.querySelector(".daybar-range"), label = bar.querySelector(".daybar-label");
+  r.addEventListener("input", () => label.textContent = `Demo: day ${r.value} of ${d.last}`);
   r.addEventListener("change", () => go(Number(r.value)));
 }
 
@@ -1159,6 +1167,116 @@ function urgentActions(acct) {
   return `<div class="actions">${call}<a class="btn ${call ? "quiet" : "danger"}" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=emergency+vet+near+me">Find an emergency vet</a></div>`;
 }
 
+/* ---------------- Alerts: episodes, owner responses, follow-ups ---------------- */
+// An "episode" = consecutive days with a yellow or red result.
+// The owner can answer an alert ("I've contacted my vet" / "My vet checked"); the app
+// then stops repeating it, keeps watching, and alerts again only if things get worse
+// or a new episode starts. When things settle, a follow-up card says so.
+const RANK = { good: 0, blip: 0, vet: 1, urgent: 2 };
+function episodes(d) {
+  const out = [];
+  if (!d.days) return out;
+  d.days.slice(0, d.day).forEach((st, i) => {
+    const r = RANK[st.level] || 0, day = i + 1, cur = out[out.length - 1];
+    if (!r) return;
+    if (cur && cur.end === day - 1) { cur.end = day; if (r > cur.rank) { cur.rank = r; cur.status = st; } }
+    else out.push({ start: day, end: day, rank: r, status: st });
+  });
+  return out;
+}
+const responsesIn = (cat, ep, d) => (cat.responses || []).filter(r => r.day >= ep.start && r.day <= Math.min(ep.end, d.day));
+const daysText = ep => ep.start === ep.end ? `day ${ep.start}` : `days ${ep.start}–${ep.end}`;
+const RESPONSE_TEXT = {
+  contacted: "you contacted your vet",
+  vet_ok: "your vet checked {name}",
+};
+function responseLine(cat, r) { return `On day ${r.day}, ${fillName(RESPONSE_TEXT[r.kind], cat)}.`; }
+
+// The big status card, or a calmer "you've already acted" version of it
+function statusCard(cat, d) {
+  const s = d.status, colour = COLOUR[s.level] || "green", st = STATUS[colour];
+  const msg = personalise(s.message, cat, d);
+  const what = colour === "red" ? msg.split(" This pattern")[0] : noticed(msg, cat);
+  const eps = episodes(d), ep = eps.length && eps[eps.length - 1].end === d.day ? eps[eps.length - 1] : null;
+  // Only answers given at this level or higher count (a red day re-alerts after a yellow was answered)
+  const answered = ep ? responsesIn(cat, ep, d).filter(r => r.rank >= RANK[s.level]) : [];
+
+  if (colour !== "green" && answered.length) {
+    const r = answered[answered.length - 1];
+    return `<div class="status ${colour}" role="status">
+      <span class="pill" style="--c:${st.color}">${st.pill} · followed up</span>
+      <h3>${esc(responseLine(cat, r))}</h3>
+      <p>Thanks for checking on ${esc(cat.name)}. We're still seeing this, so we'll keep watching and alert you again if it gets worse or something new appears.</p>
+      <div class="noticed"><b>Still noticing (since day ${ep.start})</b>${esc(what)}</div>
+      ${colour === "red" ? `<p class="foot">If ${esc(cat.name)} seems worse, contact an emergency vet right away.</p>${urgentActions(me())}` : ""}
+      <button class="link-btn" data-undo="${r.id}" style="align-self:flex-start">Undo</button>
+    </div>`;
+  }
+
+  let extra = "";
+  if (s.level === "blip") extra = `<div class="noticed"><b>One unusual day</b>${esc(noticed(msg, cat))} We'll keep watching over the next 48 hours.</div>`;
+  else if (colour !== "green" && msg) extra = `<div class="noticed"><b>What we noticed${ep && ep.start < d.day ? ` (since day ${ep.start})` : ""}</b>${esc(what)}</div>`;
+  let actions = "";
+  if (colour === "red") {
+    actions = urgentActions(me()) + `<div class="actions"><button class="btn quiet" data-respond="contacted">I've contacted a vet</button></div>`;
+  } else if (colour === "yellow") {
+    actions = `<div class="actions"><button class="btn quiet" data-action="review">Review the changes</button><button class="btn" data-action="share">Share history with your vet</button></div>
+      <p class="small-print">Already done something about it?</p>
+      <div class="row"><button class="btn small quiet" data-respond="contacted">I've contacted my vet</button><button class="btn small quiet" data-respond="vet_ok">My vet checked</button></div>`;
+  }
+  return `<div class="status ${colour}" role="status">
+      <span class="pill" style="--c:${st.color}">${st.pill}</span>
+      <h3>${esc(fillName(st.head, cat))}</h3>
+      <p>${esc(fillName(st.body, cat))}</p>
+      ${extra}
+      <p class="foot">${esc(fillName(st.foot, cat))}</p>
+      ${actions}
+    </div>`;
+}
+
+// Back to normal after an alert in the last 7 days: say so, instead of silently going green
+function followUpCard(cat, d) {
+  if (RANK[d.status.level]) return "";
+  const eps = episodes(d), ep = eps[eps.length - 1];
+  if (!ep || d.day - ep.end > 7) return "";
+  const col = ep.rank === 2 ? STATUS.red : STATUS.yellow;
+  const msg = personalise(ep.status.message, cat, { ...d, day: ep.start });
+  const what = ep.rank === 2 ? msg.split(" This pattern")[0] : noticed(msg, cat);
+  const said = responsesIn(cat, ep, d).map(r => responseLine(cat, r)).join(" ");
+  return `<div class="card followup">
+    <span class="pill" style="--c:${col.color}">Follow-up</span>
+    <h3>${esc(cat.name)}'s patterns ${learning(cat) ? "look normal again" : "are back within the usual range"}.</h3>
+    <p>On ${daysText(ep)} we noticed: ${esc(what)}</p>
+    <p>Since day ${ep.end + 1}, things look ${learning(cat) ? "normal" : `like ${esc(cat.name)}'s usual`} again.${said ? " " + esc(said) : ""}</p>
+    <p class="small-print">If your vet asked you to watch for anything, add it to Your notes below. We'll alert you again if it comes back.</p>
+  </div>`;
+}
+
+function wireResponses(el, cat, d, rerender) {
+  el.querySelectorAll("[data-respond]").forEach(b => b.addEventListener("click", () => {
+    cat.responses = [...(cat.responses || []), { id: newId(), day: d.day, rank: RANK[d.status.level], kind: b.dataset.respond }];
+    save(); toast("Thanks. We'll keep watching."); rerender();
+  }));
+  el.querySelectorAll("[data-undo]").forEach(b => b.addEventListener("click", () => {
+    cat.responses = (cat.responses || []).filter(r => r.id !== b.dataset.undo); save(); rerender();
+  }));
+}
+
+// Dashboard: every alert so far, with what the owner did
+function alertHistory(cat, d) {
+  const eps = episodes(d);
+  if (!d.days) return "";
+  return `<div class="card"><h3>Alerts so far</h3>
+    ${eps.length ? `<ul class="note-list">${eps.slice().reverse().map(ep => {
+      const col = ep.rank === 2 ? STATUS.red : STATUS.yellow;
+      const msg = personalise(ep.status.message, cat, { ...d, day: ep.start });
+      const said = responsesIn(cat, ep, d).map(r => responseLine(cat, r)).join(" ");
+      return `<li><div class="n-body"><p class="n-date"><i class="dot" style="background:${col.color}"></i>${daysText(ep)}${ep.end === d.day ? " · still going" : ""}</p>
+        <p class="n-tags">${col.pill}</p><p>${esc(ep.rank === 2 ? msg.split(" This pattern")[0] : noticed(msg, cat))}</p>
+        ${said ? `<p class="soft">${esc(said)}</p>` : ""}</div></li>`;
+    }).join("")}</ul>` : `<p class="soft">No alerts up to day ${d.day}.</p>`}</div>`;
+}
+
 /* ---------------- Home ---------------- */
 let preview = null;   // demo: preview a mascot animation
 async function renderHome() {
@@ -1168,18 +1286,6 @@ async function renderHome() {
   if (learning(cat)) return renderLearning(cat, d, el);
 
   const s = d.status, colour = COLOUR[s.level] || "green", st = STATUS[colour];
-  const msg = personalise(s.message, cat, d);
-  let extra = "";
-  if (s.level === "blip") extra = `<div class="noticed"><b>One unusual day</b>${esc(noticed(msg, cat))} We'll keep watching over the next 48 hours.</div>`;
-  else if (colour !== "green" && msg) extra = `<div class="noticed"><b>What we noticed</b>${esc(colour === "yellow" ? noticed(msg, cat) : msg.split(" This pattern")[0])}</div>`;
-
-  const acct = me();
-  let actions = "";
-  if (colour === "red") {
-    actions = urgentActions(acct);
-  } else if (colour === "yellow") {
-    actions = `<div class="actions"><button class="btn quiet" data-action="review">Review the changes</button><button class="btn" data-action="share">Share history with your vet</button></div>`;
-  }
   const ageNote = s.details && s.details.age_note ? `<p class="age-note">${esc(personalise(s.details.age_note, cat, d))}</p>` : "";
 
   const rec = (preview ? [{ scene: preview, text: "Preview" }] : d.recent);
@@ -1190,14 +1296,8 @@ async function renderHome() {
   el.innerHTML = `
     ${dayBar(cat, d)}
     <div class="who">${sticker(cat, "", st.color)}<p class="name">${esc(cat.name)}</p></div>
-    <div class="status ${colour}" role="status">
-      <span class="pill" style="--c:${st.color}">${st.pill}</span>
-      <h3>${esc(fillName(st.head, cat))}</h3>
-      <p>${esc(fillName(st.body, cat))}</p>
-      ${extra}
-      <p class="foot">${esc(fillName(st.foot, cat))}</p>
-      ${actions}
-    </div>
+    ${statusCard(cat, d)}
+    ${followUpCard(cat, d)}
     ${ageNote}
     <p class="section-title">What ${esc(cat.name)} did last</p>
     <div class="now">${mascot(last.scene, fillName(TITLE[last.scene] || TITLE.idle, cat), cat.coat)}
@@ -1207,7 +1307,8 @@ async function renderHome() {
     ${notesCard(cat)}
     <p class="small-print">Demo: showing simulated data from ${esc(simLabel(d.sim))}. Change it in Profile.</p>`;
   wireNotes(cat, renderHome);
-  wireDayBar(cat, d, renderHome);
+  wireDayBar(el, cat, d, renderHome);
+  wireResponses(el, cat, d, renderHome);
   el.querySelector("[data-action=review]")?.addEventListener("click", () => setTab("dash"));
   el.querySelector("[data-action=share]")?.addEventListener("click", () => shareHistory(cat, d));
 }
@@ -1221,7 +1322,11 @@ function renderLearning(cat, d, el) {
   const pct = Math.round(cat.day / BASELINE_DAYS * 100), left = BASELINE_DAYS - cat.day;
   // Urgent patterns are checked from day 1 against typical ranges for any cat
   let alert = "";
-  if (d.status.level === "urgent") {
+  const learnEps = episodes(d), learnEp = learnEps[learnEps.length - 1];
+  const learnAnswered = learnEp && learnEp.end === d.day ? responsesIn(cat, learnEp, d) : [];
+  if (d.status.level === "urgent" && learnAnswered.length) {
+    alert = statusCard(cat, d);
+  } else if (d.status.level === "urgent") {
     const st = STATUS.red, msg = personalise(d.status.message, cat, d).split(" This pattern")[0];
     alert = `<div class="status red" role="alert">
       <span class="pill" style="--c:${st.color}">${st.pill}</span>
@@ -1230,6 +1335,7 @@ function renderLearning(cat, d, el) {
       <div class="noticed"><b>What we noticed</b>${esc(msg)}</div>
       <p class="foot">${esc(st.foot)}</p>
       ${urgentActions(me())}
+      <div class="actions"><button class="btn quiet" data-respond="contacted">I've contacted a vet</button></div>
       <p class="small-print">Purrcast is still learning ${esc(cat.name)}'s routine, but this pattern is worrying for any cat.</p>
     </div>`;
   }
@@ -1241,7 +1347,7 @@ function renderLearning(cat, d, el) {
   ];
   el.innerHTML = `
     <div class="who">${sticker(cat, "md", alert ? STATUS.red.color : null)}<p class="name">${esc(cat.name)}</p></div>
-    ${alert}
+    ${alert || followUpCard(cat, d)}
     <div class="center"><h2 style="font-size:24px">Learning ${esc(cat.name)}'s routine</h2>
       <p class="soft">Every cat is different, so Purrcast first learns what's normal for ${esc(cat.name)}.</p></div>
     <div class="learn-grid">${cards.map(c => `<div class="learn-card">${mascot(c.scene, c.lbl, cat.coat)}<p class="big">${c.big}</p><p class="lbl">${c.lbl}</p></div>`).join("")}</div>
@@ -1255,6 +1361,7 @@ function renderLearning(cat, d, el) {
       <div class="row"><button class="btn quiet small" id="next-day">Next day</button><button class="btn small" id="skip-day">Skip to day 60</button></div>
       <p>Simulated data from ${esc(simLabel(d.sim))}. Change it in Profile.</p></div>`;
   wireNotes(cat, renderHome);
+  wireResponses(el, cat, d, renderHome);
   // After day 14 the demo jumps to the end of the simulated data (day 60)
   $("next-day").addEventListener("click", () => { cat.day = cat.day + 1; save(); renderHome(); });
   $("skip-day").addEventListener("click", () => { cat.day = d.last; save(); renderHome(); });
@@ -1301,7 +1408,7 @@ async function renderDash() {
     const line = usual ? `<line x1="0" x2="${w}" y1="${h - 1 - usual / max * (h - 8)}" y2="${h - 1 - usual / max * (h - 8)}"/>` : "";
     const flag = changed[m.tile] && !learning(cat) ? ` changed${colour === "red" ? " red" : ""}` : "";
     return `<div class="card metric${flag}">${ICONS[m.tile]}
-      <div class="m-top"><span class="m-name">${m.label}</span><span class="m-val">${fmtVal(m, last ? last[m.key] : null)} <span class="m-sub">${learning(cat) ? "latest day" : "yesterday"}</span></span></div>
+      <div class="m-top"><span class="m-name">${m.label}</span><span class="m-val">${fmtVal(m, last ? last[m.key] : null)} <span class="m-sub">on day ${d.day}</span></span></div>
       <p class="m-sub">${usual ? `Usual: ${fmtVal(m, usual)}${m.per ? ` ${m.per}` : ""}. ` : ""}${words}</p>
       <svg class="chart" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="${m.label}, last ${vals.length} days. ${words}">${bars}${line}</svg></div>`;
   }).join("");
@@ -1322,14 +1429,15 @@ async function renderDash() {
   el.innerHTML = `
     ${learning(cat) ? "" : dayBar(cat, d)}
     <div><h2>${esc(cat.name)}'s dashboard</h2>
-      <p class="soft">${learning(cat) ? `Day ${cat.day} of ${BASELINE_DAYS}: Purrcast is still learning ${esc(cat.name)}'s usual, so there's nothing to compare yet.` : `Last 14 days. Highlighted cards changed.`}</p></div>
+      <p class="soft">${learning(cat) ? `Day ${cat.day} of ${BASELINE_DAYS}: Purrcast is still learning ${esc(cat.name)}'s usual, so there's nothing to compare yet.` : `The 14 days up to day ${d.day}. Highlighted cards changed.`}</p></div>
     <p class="legend"><span><i></i>each day</span>${learning(cat) ? "" : `<span><s></s>${esc(cat.name)}'s usual</span>`}<span><i style="background:none;border-style:dashed"></i>no reliable reading</span></p>
     ${cards}
     ${gaps ? `<p class="small-print">${gaps} day${gaps === 1 ? "" : "s"} had unreliable readings (e.g. a knocked-over bowl) and ${gaps === 1 ? "was" : "were"} skipped.</p>` : ""}
+    ${alertHistory(cat, d)}
     ${notesList(cat)}
     ${details}`;
   $("dash-share")?.addEventListener("click", () => shareHistory(cat, d));
-  if (!learning(cat)) wireDayBar(cat, d, renderDash);
+  if (!learning(cat)) wireDayBar(el, cat, d, renderDash);
   el.querySelectorAll("[data-del-note]").forEach(b => b.addEventListener("click", () => {
     if (!b.dataset.armed) { b.dataset.armed = "1"; b.textContent = "Tap to delete"; return; }
     cat.notes = (cat.notes || []).filter(n => n.id !== b.dataset.delNote); save(); renderDash();
