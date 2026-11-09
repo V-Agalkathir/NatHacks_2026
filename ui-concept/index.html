@@ -467,7 +467,8 @@ label.field, .field { display: flex; flex-direction: column; gap: 6px; font-weig
    ============================================================ */
 const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
-const API = params.get("api") || (location.protocol.startsWith("http") ? "http://localhost:8000" : null);
+// Backend runs on the same computer as the UI, port 8000 (works on a phone too)
+const API = params.get("api") || (location.protocol.startsWith("http") ? `http://${location.hostname}:8000` : null);
 
 // localStorage can be blocked; never let it break the app
 const store = {
