@@ -1,4 +1,4 @@
-"""Cat endpoints: GET /cats, GET /cats/{cat_id}/status, GET /cats/{cat_id}/history.
+"""Cat endpoints: GET /cats, /cats/{cat_id}/status, /now, /recent, /history.
 
 LEARN:
 - APIRouter groups related endpoints so we don't crowd main.py.
@@ -57,8 +57,11 @@ def get_cats():
 
 
 @router.get("/{cat_id}/status")
-def get_cat_status(cat_id: str):
-    """GET /cats/{cat_id}/status -> status object matching CONTRACT section 5."""
+def get_cat_status(
+    cat_id: str,
+    age: float | None = Query(None, ge=0, le=30, description="Owner's cat age in years (age-aware checks)"),
+):
+    """GET /cats/{cat_id}/status?age=0.5 -> status object matching CONTRACT section 5."""
     cat_id = cat_id.lower()
     if is_mock() and cat_id == "luna":
         return {
@@ -66,7 +69,7 @@ def get_cat_status(cat_id: str):
             "updated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
     try:
-        return engine_run.assess(cat_id)
+        return engine_run.assess(cat_id, age)
     except KeyError as e:
         raise HTTPException(status_code=404, detail=f"Unknown cat '{cat_id}'") from e
 
@@ -77,6 +80,16 @@ def get_cat_now(cat_id: str):
     cat_id = cat_id.lower()
     try:
         return engine_run.now(cat_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=f"Unknown cat '{cat_id}'") from e
+
+
+@router.get("/{cat_id}/recent")
+def get_cat_recent(cat_id: str, n: int = Query(5, ge=1, le=50)):
+    """GET /cats/{cat_id}/recent?n=5 -> last activities, newest first, for 'What they did last'."""
+    cat_id = cat_id.lower()
+    try:
+        return engine_run.recent(cat_id, n)
     except KeyError as e:
         raise HTTPException(status_code=404, detail=f"Unknown cat '{cat_id}'") from e
 

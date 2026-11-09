@@ -10,6 +10,8 @@ Wording rules (agreed with the team):
   - Make no medical claims or diagnoses.
   - Always point to the vet for anything else the owner notices.
   - Urgent stays calm but is never softened: a blockage can be life-threatening.
+  - Litter: owners see visit COUNTS only. Output (grams) is measured and used by
+    the rules, but never shown as a number (config.OWNER_HIDDEN).
 
 Template sentences always work with no API key. If USE_LLM=true, polish()
 lets an LLM reword them, but it is only given the level and facts. It never
@@ -49,8 +51,9 @@ PHRASES = {
                       "has been using the litter box about {pct}% {more} often than usual"),
     "litter_avg_sec": ("spent about {pct}% {more} time per litter visit than usual",
                        "has been spending about {pct}% {more} time per litter visit than usual"),
-    "litter_output_g": ("left about {pct}% {more} in the litter box than usual",
-                        "has been leaving about {pct}% {more} in the litter box than usual"),
+    # Output is never shown as a number (see phrase()); kept for completeness
+    "litter_output_g": ("had a change in litter box use",
+                        "has had a gradual change in litter box use"),
     "weight_kg": ("weighed about {pct}% {more} than usual",
                   "has been weighing about {pct}% {more} than usual"),
     "rest_min": ("rested about {pct}% {more} than usual",
@@ -113,9 +116,17 @@ def phrase(f: dict, cat: dict) -> str:
 
     # Combination findings have their own wording
     if kind == "drink_and_pee":
-        return f"{p['subj_l']} has been drinking more and leaving more in the litter box"
+        if f.get("visits_up"):
+            return f"{p['subj_l']} has been drinking more and visiting the litter box more often"
+        return f"{p['subj_l']} has been drinking more, and {p['pos']} litter box use has changed"
+    if kind == "eat_more_lose_weight":
+        return f"{p['subj_l']} has been eating more but slowly losing weight"
+    if kind == "visits_up":
+        return f"{p['subj_l']} has been visiting the litter box more often than usual this week"
     if kind == "eat_less_lose_weight":
         return f"{p['subj_l']} has been eating less and slowly losing weight"
+    if metric in config.OWNER_HIDDEN:
+        return f"{p['pos']} litter box use has changed"
 
     pct = _pct_change(f)
     if pct is None or metric not in PHRASES:
@@ -140,6 +151,8 @@ def describe(f: dict, cat: dict) -> str:
     value, usual = f.get("value"), f.get("usual")
     kind = f["kind"]
 
+    if f["metric"] in config.OWNER_HIDDEN:
+        return f"Litter box use has changed compared with {pos} usual."
     if kind == "trend":
         direction = "rising" if f["pct_per_week"] > 0 else "falling"
         return (f"{label} has been gradually {direction} (about {abs(f['pct_per_week']):.0f}% "
@@ -148,13 +161,21 @@ def describe(f: dict, cat: dict) -> str:
         pct = (1 - value / usual) * 100 if value and usual else 0
         return f"Weight is {fmt('weight_kg', value)} vs {pos} usual {fmt('weight_kg', usual)} ({pct:.0f}% lower)."
     if kind == "drink_and_pee":
-        return "Drinking more and leaving more in the litter box at the same time."
+        more = "visiting the litter box more often" if f.get("visits_up") else "a change in litter box use"
+        return (f"Drinking more ({fmt('water_ml', value)} yesterday vs {pos} usual {fmt('water_ml', usual)}) "
+                f"and {more} at the same time.")
+    if kind == "visits_up":
+        return (f"Litter visits averaged {f['week_avg']:.1f} a day this week vs {pos} usual "
+                f"{usual:.1f}. Visiting more often is worth mentioning to your vet.")
+    if kind == "eat_more_lose_weight":
+        return (f"Eating more ({fmt('food_g', value)} yesterday vs {pos} usual {fmt('food_g', usual)}) "
+                f"while slowly losing weight.")
     if kind == "eat_less_lose_weight":
         return (f"Eating less ({fmt('food_g', value)} yesterday vs {pos} usual {fmt('food_g', usual)}) "
                 f"while slowly losing weight.")
     if kind == "litter_blockage":
-        return (f"{value:.0f} litter visits in the last day (usually about {usual:.0f}) "
-                f"with very little left behind.")
+        return (f"{value:.0f} litter visits in the last day (usually about {usual:.0f}), "
+                f"most of them very short.")
     if kind == "not_eating":
         return f"Ate {fmt('food_g', value)} in the last day vs {pos} usual {fmt('food_g', usual)}, for 2 days in a row."
     # spike / multi: one day's value vs normal
@@ -162,15 +183,18 @@ def describe(f: dict, cat: dict) -> str:
     return f"{label} {fmt(f['metric'], value)} {when} vs {pos} usual {fmt(f['metric'], usual)}."
 
 
-COMBOS = ("drink_and_pee", "eat_less_lose_weight")
+COMBOS = ("drink_and_pee", "eat_more_lose_weight", "eat_less_lose_weight")
 
 
 def headline(findings: list[dict]) -> list[dict]:
     """The findings worth putting in the short message.
     A warning combination already sums up its metrics, so show it alone;
-    otherwise show up to 2 findings."""
+    otherwise show up to 2 findings, preferring ones the owner can see."""
     combos = [f for f in findings if f["kind"] in COMBOS]
-    return combos[:1] if combos else findings[:2]
+    if combos:
+        return combos[:1]
+    shown = [f for f in findings if f["metric"] not in config.OWNER_HIDDEN]
+    return (shown or findings)[:2]
 
 
 def build_message(level: str, findings: list[dict], cat: dict) -> str:
@@ -185,8 +209,8 @@ def build_message(level: str, findings: list[dict], cat: dict) -> str:
         f = findings[0]
         tail = "This pattern can need urgent care. Contact your vet or an emergency clinic now."
         if f["kind"] == "litter_blockage":
-            return (f"{name} has visited the litter box {f['value']:.0f} times in the last day "
-                    f"with very little output. {tail}")
+            return (f"{name} has visited the litter box {f['value']:.0f} times in the last day, "
+                    f"far more often than usual (about {f['usual']:.0f}). {tail}")
         if f["kind"] == "not_eating":
             return f"{name} has eaten very little for 2 days in a row. {tail}"
         return f"{name} shows a warning pattern. {tail}"
@@ -215,6 +239,10 @@ def build_tiles(level: str, findings: list[dict], last_row) -> list[dict]:
         v, u = hit.get("value"), hit.get("usual")
         if hit["kind"] == "litter_blockage":
             word = "many visits"
+        elif hit["metric"] in config.OWNER_HIDDEN:
+            word = "changed"
+        elif hit["kind"] == "visits_up":
+            word = "more visits"
         elif hit["kind"] == "trend":
             word = "up" if hit["pct_per_week"] > 0 else "down"
         elif v is not None and u is not None:
@@ -235,7 +263,9 @@ def build_details(level: str, findings: list[dict], cat: dict) -> dict:
     p = pronouns(cat)
 
     if findings:
-        changed = " ".join(describe(f, cat) for f in findings)
+        # Owner-hidden findings (litter output) are only described if nothing else explains the change
+        shown = [f for f in findings if f["metric"] not in config.OWNER_HIDDEN] or findings
+        changed = " ".join(dict.fromkeys(describe(f, cat) for f in shown))
         if level == "blip":
             changed += " Everything else is consistent with usual."
     else:

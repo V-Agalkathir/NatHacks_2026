@@ -33,7 +33,12 @@ SCENARIOS = {
     "weight_loss": "vet",
     "litter_emergency": "urgent",
     "not_eating": "urgent",
+    "diabetes": "vet",
+    "hyperthyroid": "vet",
+    "dental": "vet",
+    "growing": "good",          # a growing kitten (age 0.5) is not flagged
 }
+AGES = {"growing": 0.5}
 
 
 def check_scenarios(seeds) -> list[str]:
@@ -43,7 +48,8 @@ def check_scenarios(seeds) -> list[str]:
     combo_hits = 0
     for scenario, expected in SCENARIOS.items():
         for seed in seeds:
-            cat = {"cat_id": "test", "name": "Test", "sex": "female", "scenario": scenario}
+            cat = {"cat_id": "test", "name": "Test", "sex": "female", "scenario": scenario,
+                   "age": AGES.get(scenario, 5)}
             r = assess_rows(fake_daily.generate(seed, [cat]), cat)
             if r["level"] != expected:
                 problems.append(f"{scenario} seed {seed}: got {r['level']} "
@@ -61,4 +67,5 @@ if __name__ == "__main__":
     for p in demo + extra:
         print("FAIL", p)
     print(f"\nDemo cats: {len(seeds) * 4 - len(demo)}/{len(seeds) * 4} passed")
-    print(f"All scenarios: {600 - len(extra)}/600 passed (98%+ is fine; noise is random)")
+    total = len(SCENARIOS) * 100
+    print(f"All scenarios: {total - len(extra)}/{total} passed (98%+ is fine; noise is random)")

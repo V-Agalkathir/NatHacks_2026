@@ -56,13 +56,14 @@ def compute(rows: pd.DataFrame, base: dict,
     return out
 
 
-def is_trend(metric: str, t: dict) -> bool:
+def is_trend(metric: str, t: dict, factor: float = 1.0) -> bool:
     """A real trend must pass all three checks:
     1. fast enough:   at least TREND_PCT_PER_WEEK (weight has its own lower bar)
     2. not noise:     at least 4x the slope noise alone could produce
     3. really moved:  the last 3 days sit 1+ std away from normal, in the same direction
+    factor < 1 lowers the speed bar (used for senior cats).
     """
-    threshold = config.TREND_PCT_OVERRIDE.get(metric, config.TREND_PCT_PER_WEEK)
+    threshold = config.TREND_PCT_OVERRIDE.get(metric, config.TREND_PCT_PER_WEEK) * factor
     direction = np.sign(t["pct_per_week"])
     speed = abs(t["pct_per_week"])
     return (speed >= threshold

@@ -10,6 +10,11 @@ SCENARIO_BY_CAT = {
     "luna": "blip",
     "lena": "slow_drinking",
     "oscar": "litter_emergency",
+    "bella": "diabetes",
+    "milo": "hyperthyroid",
+    "coco": "dental",
+    "nala": "not_eating",
+    "pip": "growing",
 }
 
 VALID_SCENARIOS = {
@@ -19,6 +24,10 @@ VALID_SCENARIOS = {
     "weight_loss",
     "litter_emergency",
     "not_eating",
+    "diabetes",
+    "hyperthyroid",
+    "dental",
+    "growing",
 }
 
 
@@ -54,6 +63,15 @@ def apply_scenario(
         raise ValueError(f"day_number must be between 1 and {total_days}")
 
     values = dict(baseline)
+
+    # A growing kitten: weight climbs from day 1 and food, water and litter
+    # grow with it. Normal for a kitten, so the engine should NOT flag it.
+    if scenario == "growing":
+        growth = 1.005**day_number
+        for key in ("weight_kg", "food_g_day", "water_ml_day", "litter_output_g_day"):
+            values[key] *= growth
+        return values
+
     if day_number < onset_day:
         return values
 
@@ -64,9 +82,28 @@ def apply_scenario(
         values["water_ml_day"] *= 1.35
     elif scenario == "slow_drinking":
         gradual_factor = 1.03**days_since_onset
+        # Kidney-disease-like: more drinking, more peeing (more and bigger visits)
         values["water_ml_day"] *= gradual_factor
         values["litter_output_g_day"] *= gradual_factor
+        values["litter_visits_day"] *= 1.025**days_since_onset
         values["weight_kg"] *= 0.999**days_since_onset
+    elif scenario == "diabetes":
+        # Diabetes-like: drinking, peeing and eating all rise, but weight drops
+        values["water_ml_day"] *= 1.035**days_since_onset
+        values["litter_output_g_day"] *= 1.035**days_since_onset
+        values["litter_visits_day"] *= 1.03**days_since_onset
+        values["food_g_day"] *= 1.02**days_since_onset
+        values["weight_kg"] *= 0.997**days_since_onset
+    elif scenario == "hyperthyroid":
+        # Thyroid-like: eating clearly more, yet losing weight; a bit more drinking, less rest
+        values["food_g_day"] *= 1.025**days_since_onset
+        values["water_ml_day"] *= 1.01**days_since_onset
+        values["weight_kg"] *= 0.997**days_since_onset
+        values["bed_min_day"] *= 0.99**days_since_onset
+    elif scenario == "dental":
+        # Dental-pain-like: eating slowly drops, weight follows
+        values["food_g_day"] *= 0.98**days_since_onset
+        values["weight_kg"] *= 0.998**days_since_onset
     elif scenario == "weight_loss":
         values["weight_kg"] *= 0.997**days_since_onset
         values["food_g_day"] *= 0.995**days_since_onset

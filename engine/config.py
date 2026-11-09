@@ -62,6 +62,20 @@ BLIP_Z = _float("BLIP_Z", 2.0)      # one odd day
 URGENT_Z = _float("URGENT_Z", 3.0)  # used by the litter blockage rule
 USE_LLM = os.getenv("USE_LLM", "false").lower() == "true"
 
+# ---------- Age-aware checks (engine/age.py) ----------
+KITTEN_MAX_AGE = _float("KITTEN_MAX_AGE", 1.0)    # under this (years) = still growing
+SENIOR_MIN_AGE = _float("SENIOR_MIN_AGE", 10.0)   # this age and up = senior
+SENIOR_TREND_FACTOR = _float("SENIOR_TREND_FACTOR", 0.75)  # seniors: trends flagged at 75% of the usual speed
+WEIGHT_DROP_PCT = _float("WEIGHT_DROP_PCT", 5)    # weight this % under normal = worth a vet visit
+SENIOR_WEIGHT_DROP_PCT = _float("SENIOR_WEIGHT_DROP_PCT", 4)
+
+# Litter visits averaging this % above normal for a week = worth a vet visit
+VISITS_UP_PCT = _float("VISITS_UP_PCT", 30)
+
+# Measured and used by the rules, but never shown to owners as a number
+# (owners see litter visit counts; output only helps tell a blockage from more peeing)
+OWNER_HIDDEN = {"litter_output_g"}
+
 # ---------- Metrics ----------
 # Columns from docs/CONTRACT.md section 3 that the engine scores.
 METRICS = [
