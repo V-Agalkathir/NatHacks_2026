@@ -1092,12 +1092,25 @@ const LIVE_DEVICES = [
 ];
 const CAT_ON_G = 1500;      // a jump this big on the litter box or bed = the cat is on it
 const SEGMENT_END_MS = 2500; // no reading for this long = the burst is over
-const live = { code: null, client: null, online: false, lastMsg: 0, dev: {}, events: [], scene: null, boot: null };
+const live = { code: null, client: null, online: false, offline: false, lastMsg: 0, dev: {}, events: [], today: newToday(), scene: null, boot: null };
 
 // Forget everything seen so far (the simulation restarted, or the owner tapped Reset)
+// What the live scales measured since connecting (shown on the learning screen)
+function newToday() { return { food: 0, water: 0, visits: 0, kg: null, any: false }; }
+function countToday(key, amount, kg) {
+  const t = live.today;
+  if (key === "food" || key === "water") t[key] += amount;
+  if (key === "visits") t.visits += 1;
+  if (kg) t.kg = kg;
+  t.any = true;
+}
+const todayText = key => { const t = live.today;
+  return key === "food" ? `${Math.round(t.food)} g` : key === "water" ? `${Math.round(t.water)} ml`
+       : key === "visits" ? `${t.visits} visit${t.visits === 1 ? "" : "s"}` : fmtWeight(t.kg); };
+
 function resetLive() {
   Object.values(live.dev).forEach(d => clearTimeout(d.timer));
-  Object.assign(live, { dev: {}, events: [], scene: null, lastMsg: live.lastMsg });
+  Object.assign(live, { dev: {}, events: [], today: newToday(), scene: null, lastMsg: live.lastMsg });
   updateLive();
 }
 
@@ -1120,7 +1133,7 @@ function loadMqtt() {
 function liveDisconnect() {
   if (live.client) { try { live.client.end(true); } catch {} }
   Object.values(live.dev).forEach(d => clearTimeout(d.timer));
-  Object.assign(live, { code: null, client: null, online: false, lastMsg: 0, dev: {}, events: [], scene: null, boot: null });
+  Object.assign(live, { code: null, client: null, online: false, offline: false, lastMsg: 0, dev: {}, events: [], today: newToday(), scene: null, boot: null });
 }
 
 async function liveConnect(code) {
@@ -1139,7 +1152,7 @@ async function liveConnect(code) {
   c.on("message", (topic, buf) => {
     if (live.client !== c) return;
     const text = buf.toString();
-    if (topic.endsWith("/status")) { live.online = text === "online"; updateLive(); return; }
+    if (topic.endsWith("/status")) { live.online = text === "online"; live.offline = text === "offline"; updateLive(); return; }
     let m; try { m = JSON.parse(text); } catch { return; }
     if (topic.includes("/last/")) {
       if (live.boot && m.boot && m.boot !== live.boot) return;   // old value from before a restart
@@ -1155,7 +1168,7 @@ const median = a => { const b = [...a].sort((x, y) => x - y); return b[Math.floo
 
 function onReading(device, g) {
   if (!LIVE_DEVICES.some(d => d.id === device) || !isFinite(g)) return;
-  live.online = true; live.lastMsg = Date.now();
+  live.online = true; live.offline = false; live.lastMsg = Date.now();
   const s = devState(device);
   s.g = g;
   if (s.empty == null && (device === "litter" || device === "bed")) s.empty = g;
@@ -1189,7 +1202,7 @@ function endSegment(device) {
 
   if (device === "water" || device === "food") {
     const drop = before - after;
-    if (drop >= 2 && drop < 100) addEvent(device === "water" ? "drink" : "eat",
+    if (drop >= 2 && drop < 100) countToday(device, drop), addEvent(device === "water" ? "drink" : "eat",
       device === "water" ? `Drank ${Math.round(drop)} ml` : `Ate ${Math.round(drop)} g`);
     else if (drop >= 100) addEvent("idle", `${device === "water" ? "Water" : "Food"} bowl knocked over? Not counted`);
     else if (-drop >= 50) addEvent("idle", `${device === "water" ? "Water" : "Food"} bowl refilled. Not counted`);
@@ -1206,8 +1219,8 @@ function endSegment(device) {
       const start = s.since ?? now - seg.length * 1000;
       const kg = s.catKg ?? (median(onTop) - base) / 1000;
       const mins = (now - start) / 60000;
-      if (device === "litter") addEvent("litter", `Used the litter box for ${fmtDur(mins)}, left ${Math.round(Math.max(0, after - base))} g. Weighs ${fmtWeight(kg)}`);
-      else addEvent("sleep", `Napped for ${fmtDur(mins)}. Weighs ${fmtWeight(kg)}`);
+      if (device === "litter") countToday("visits", 1, kg), addEvent("litter", `Used the litter box for ${fmtDur(mins)}, left ${Math.round(Math.max(0, after - base))} g. Weighs ${fmtWeight(kg)}`);
+      else countToday("nap", 0, kg), addEvent("sleep", `Napped for ${fmtDur(mins)}. Weighs ${fmtWeight(kg)}`);
     }
     s.since = null; s.catKg = null; s.empty = after;        // new empty weight (litter now includes the output)
   }
@@ -1246,7 +1259,7 @@ function ago(t) {
 function liveCard(cat) {
   liveConnect(cat.live).catch(() => {});
   return `<div class="live" id="live">
-    <div class="live-head"><span class="live-dot" id="live-dot"></span><span>Live from the scales</span><span class="code">${esc(cat.live)}</span>
+    <div class="live-head"><span class="live-dot" id="live-dot"></span><span id="live-label">Live from the scales</span><span class="code">${esc(cat.live)}</span>
       <button class="link-btn" id="live-reset" style="padding:0 0 0 6px;font-size:14px">Reset</button></div>
     <div class="now"><div id="live-stage"></div><div><p class="what" id="live-what"></p><p class="when" id="live-when"></p></div></div>
     <div class="live-grid">${LIVE_DEVICES.map(d => `<div class="live-cell" id="live-${d.id}">${ICONS[d.icon]}${d.label}<b>—</b></div>`).join("")}</div>
@@ -1257,9 +1270,14 @@ function liveCard(cat) {
 function updateLive() {
   const el = $("live"), cat = currentCat();
   if (!el || !cat) return;
-  const fresh = live.online || Date.now() - live.lastMsg < 75000;
+  // Learning screen: once the scales report, the "today" cards count what they measured
+  if (live.today.any) document.querySelectorAll("[data-today]").forEach(e => e.textContent = todayText(e.dataset.today));
+  if ($("learn-live-note")) $("learn-live-note").hidden = !live.today.any;
+  // The scale says "offline" the moment it drops off (stopped simulation, lost Wi-Fi)
+  const fresh = !live.offline && (live.online || Date.now() - live.lastMsg < 75000);
   $("live-dot").className = "live-dot" + (fresh ? " on" : "");
   $("live-dot").title = fresh ? "Connected" : "Waiting for the scales";
+  $("live-label").textContent = live.offline ? "Scales offline" : fresh ? "Live from the scales" : "Waiting for the scales";
   const n = liveNow(cat);
   if (n.scene !== live.scene) { $("live-stage").innerHTML = mascot(n.scene, n.what, cat.coat); live.scene = n.scene; }
   $("live-what").textContent = n.what;
@@ -1592,10 +1610,10 @@ function renderLearning(cat, d, el) {
     </div>`;
   }
   const cards = [
-    { scene: "eat", big: val(row.food_g, "g"), lbl: "eaten today" },
-    { scene: "drink", big: val(row.water_ml, "ml"), lbl: "drunk today" },
-    { scene: "litter", big: visits, lbl: "to the litter box" },
-    { scene: "sleep", big: fmtWeight(row.weight_kg == null ? null : row.weight_kg * k), lbl: "weight (on the bed)" },
+    { key: "food", scene: "eat", big: val(row.food_g, "g"), lbl: "eaten today" },
+    { key: "water", scene: "drink", big: val(row.water_ml, "ml"), lbl: "drunk today" },
+    { key: "visits", scene: "litter", big: visits, lbl: "to the litter box" },
+    { key: "weight", scene: "sleep", big: fmtWeight(row.weight_kg == null ? null : row.weight_kg * k), lbl: "weight (on the bed)" },
   ];
   el.innerHTML = `
     <div class="who">${sticker(cat, "md", alert ? STATUS.red.color : null)}<p class="name">${esc(cat.name)}</p></div>
@@ -1603,7 +1621,8 @@ function renderLearning(cat, d, el) {
     ${cat.live ? liveCard(cat) : ""}
     <div class="center"><h2 style="font-size:24px">Learning ${esc(cat.name)}'s routine</h2>
       <p class="soft">Every cat is different, so Purrcast first learns what's normal for ${esc(cat.name)}.</p></div>
-    <div class="learn-grid">${cards.map(c => `<div class="learn-card">${mascot(c.scene, c.lbl, cat.coat)}<p class="big">${c.big}</p><p class="lbl">${c.lbl}</p></div>`).join("")}</div>
+    <div class="learn-grid">${cards.map(c => `<div class="learn-card">${mascot(c.scene, c.lbl, cat.coat)}<p class="big"${cat.live ? ` data-today="${c.key}"` : ""}>${c.big}</p><p class="lbl">${c.lbl}</p></div>`).join("")}</div>
+    ${cat.live ? `<p class="small-print center" id="learn-live-note" hidden>Today's numbers are counted live from the scales.</p>` : ""}
     <div>
       <div class="progress" role="progressbar" aria-valuemin="1" aria-valuemax="${BASELINE_DAYS}" aria-valuenow="${cat.day}" aria-label="Learning progress"><div style="width:${pct}%"></div></div>
       <p class="soft center" style="margin-top:8px">Day ${cat.day} of ${BASELINE_DAYS} · first summary in ${left} day${left === 1 ? "" : "s"}</p>
