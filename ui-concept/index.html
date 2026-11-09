@@ -1381,7 +1381,7 @@ function liveCard(cat) {
   return `<div class="live" id="live">
     <div class="live-head"><span class="live-dot" id="live-dot"></span><span id="live-label">Live from the scales</span><span class="code">${esc(cat.live)}</span>
       <button class="link-btn" id="live-reset" style="padding:0 0 0 6px;font-size:14px">Reset</button></div>
-    <div class="now"><div id="live-stage"></div><div><p class="what" id="live-what"></p><p class="when" id="live-when"></p></div></div>
+    <div class="now"><div id="live-stage"></div><div><p class="what" id="live-what"></p></div></div>
     <div class="live-list">${LIVE_DEVICES.map(d => `
       <details class="live-row" id="live-${d.id}" data-dev="${d.id}"${live.open.has(d.id) ? " open" : ""}>
         <summary>${ICONS[d.icon]}<span>${d.label}</span><span class="state"></span><b class="val">—</b><span class="chev" aria-hidden="true"></span></summary>
@@ -1408,7 +1408,6 @@ function updateLive() {
   const n = liveNow(cat);
   if (n.scene !== live.scene) { $("live-stage").innerHTML = mascot(n.scene, n.what, cat.coat); live.scene = n.scene; }
   $("live-what").textContent = n.what;
-  $("live-when").textContent = n.when;
   // The 4 scale rows: weight now, today's total, last activity, and a badge while the cat is on it
   const T = liveLog(cat).days[dateKey(Date.now())] || {};
   const today = { food: `${Math.round(T.food_g || 0)} g`, water: `${Math.round(T.water_ml || 0)} ml`,
@@ -1424,7 +1423,7 @@ function updateLive() {
     row.querySelector(".state").textContent = busy ? LIVE_BUSY[d.id] : "";
     row.classList.toggle("busy", busy);
   }
-  $("live-events").innerHTML = live.events.slice(n.scene === "idle" && live.events.length ? 1 : 0, 4).map(e =>
+  $("live-events").innerHTML = live.events.slice(0, 4).map(e =>
     `<li>${ICONS[SCENE_ICON[e.scene]] || ""}<span>${esc(e.text)} <span class="soft">(${ago(e.at)})</span></span></li>`).join("");
 }
 setInterval(updateLive, 5000);   // keeps "just now / 2 min ago" fresh
